@@ -1,0 +1,15 @@
+{
+    "name": "SamFetch",
+    "description": "A Web API to download firmwares from Samsung servers without any restriction.",
+    "website": "https://ysfchn.com",
+    "repository": "https://github.com/ysfchn/SamFetch",
+    "logo": "https://ysfchn.com/img/undercontrol.png",
+    "keywords": [
+        "samfirm",
+        "samloader",
+        "samsung",
+        "firmware",
+        "heroku",
+        "fastapi"
+    ]
+}

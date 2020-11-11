@@ -1,0 +1,7 @@
+xmltodict
+dicttoxml
+requests
+pycryptodome
+fastapi
+uvicorn
+aiofiles

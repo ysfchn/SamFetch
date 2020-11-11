@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Launch Uvicorn",
+            "type": "shell",
+            "command": "uvicorn",
+            "args": [
+                "src.main:app",
+                "--reload"
+            ]
+        }
+    ]
+}
