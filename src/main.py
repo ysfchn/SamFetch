@@ -2,6 +2,8 @@ from typing import Iterator
 from Crypto.Cipher import AES
 import xmltodict
 import requests
+import json
+import os
 
 # Helper modules
 from src.keyholder import Keyholder
@@ -48,16 +50,31 @@ _ = """
 
     A simple Web API to download Samsung Stock ROMs from Samsung's own servers without any restriction.
     It doesn't have any analytics, rate-limits, download speed limit, authorization or any crap that you don't want. 
+    This is a Web API variant of https://github.com/nlscc/samloader project. SamFetch wouldn't be possible without Samloader.
 
-    Based on: https://github.com/nlscc/samloader
+    You can go /docs to see a list of endpoints along with interactive API docs.
 
+    This project is licensed with AGPLv3.
+    https://github.com/ysfchn/SamFetch
     """
+
+CSC_CODES = json.loads(open(os.path.join("src", "csc_list.json"), "r").read())
 
 
 
 @app.get('/', response_class = PlainTextResponse)
 def home():
     return _
+
+
+
+# Returns a list of CSC/region codes.
+@app.get('/csc')
+def list_csc():
+    """
+    Returns a known list of CSC/region codes. Note that it doesn't give a warranty about having all CSC codes.
+    """
+    return CSC_CODES
 
 
 
@@ -82,6 +99,8 @@ def get_latest_firmware(region : str, model : str):
     if "versioninfo" in req:
         # Read latest firmware code.
         latest = req["versioninfo"]["firmware"]["version"]["latest"]["#text"].split("/")
+        # TODO
+        # Alternative and test version will be added soon.
         if len(latest) == 3:
             latest.append(latest[0])
         if latest[2] == "":
@@ -98,7 +117,7 @@ def get_latest_firmware(region : str, model : str):
 def get_binary_details(region : str, model : str, firmware : str):
     """
     Gets the binary details.\n
-    `firmware` is the firmware code of the device that you got from `/list` endpoint.
+    `firmware` is the firmware code of the device that you got from `/latest` endpoint.
 
     **Example Response:**
     ```json
@@ -115,7 +134,7 @@ def get_binary_details(region : str, model : str, firmware : str):
     `decrypt_key` is used for decrypting the file after downloading. It presents a hex string. Pass it to `/download` endpoint.
     """
     # Create new keyholder.
-    key = Keyholder.from_response(requests.post(Constants.NONCE_URL, **Constants.PARAMETERS()))
+    key = Keyholder.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
     # Make the request.
     req = requests.post(
         url = Constants.BINARY_INFO_URL,
@@ -166,7 +185,7 @@ def download_binary(filename : str, path : str, decrypt_key : str):
     Downloads the firmware and decrypts the file during download automatically. 
     """
     # Create new keyholder.
-    key = Keyholder.from_response(requests.post(Constants.NONCE_URL, **Constants.PARAMETERS()))
+    key = Keyholder.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
     # Make the request.
     req = requests.post(
         url = Constants.BINARY_FILE_URL,
