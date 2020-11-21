@@ -1,5 +1,6 @@
 import dicttoxml
 
+
 class Constants:
 
     # Get firmware information url
@@ -59,3 +60,15 @@ class Constants:
                 }
             }
         }, attr_type = False, root = False)
+
+    # Parses firmware version.
+    def parse_firmware(firmware: str) -> str:
+        if firmware:
+            l = firmware.split("/")
+            if len(l) == 3:
+                l.append(l[0])
+            if l[2] == "":
+                l[2] = l[0]
+            return "/".join(l)
+        else:
+            return None

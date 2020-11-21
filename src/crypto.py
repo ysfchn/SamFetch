@@ -28,7 +28,7 @@ class Crypto:
         return key.encode()
 
     @staticmethod
-    def get_auth(nonce : str) -> str:
+    def get_auth(nonce: str) -> str:
         keydata = [ord(c) % 16 for c in nonce]
         fkey = Crypto.get_fkey(keydata)
         return base64.b64encode(Crypto.aes_encrypt(nonce.encode(), fkey)).decode()

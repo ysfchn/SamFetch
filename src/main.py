@@ -14,7 +14,28 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+_ = """
+    A simple Web API to download Samsung Stock ROMs from Samsung's own servers without any restriction.
+    It doesn't have any analytics, rate-limits, download speed limit, authorization or any crap that you don't want. 
+
+    This project is licensed with AGPLv3.\n
+    [https://github.com/ysfchn/SamFetch](https://github.com/ysfchn/SamFetch)
+
+    This is a Web API variant of [samloader](https://github.com/nlscc/samloader). SamFetch wouldn't be possible without Samloader.
+    
+    ### Usage
+
+    * If you want to integrate SamFetch in your application; you can use **developer** endpoints.\n
+    * But if you just want to download the latest firmware without building a client app, just append region (CSC) and model to the end of url. (Remove other paths if exists)
+    For example `.../TUR/SM-N920C`. After visiting to the URL, the firmware should start downloading instantly.
+    """
+
+
+app = FastAPI(
+    title = "SamFetch",
+    description = _.replace("    ", ""),
+    docs_url = "/"
+)
 
 # Allow other origins, so everyone can access the service.
 app.add_middleware(
@@ -25,13 +46,14 @@ app.add_middleware(
     allow_headers = ["*"]
 )
 
+
 # A custom iterator to decrypt the bytes without writing the whole file to the disk.
 class Decryptor:
     """
-    Decrypts the file.
+    A custom iterator to decrypt the bytes without writing the whole file to the disk.
     """
 
-    def __init__(self, response : Iterator, key : str):
+    def __init__(self, response: Iterator, key: str):
         self.file_iterator = response
         self.cipher = AES.new(key, AES.MODE_ECB)
 
@@ -45,31 +67,15 @@ class Decryptor:
         else:
             return self.cipher.decrypt(chunk)
 
-_ = """
-    # SamFetch
-
-    A simple Web API to download Samsung Stock ROMs from Samsung's own servers without any restriction.
-    It doesn't have any analytics, rate-limits, download speed limit, authorization or any crap that you don't want. 
-    This is a Web API variant of https://github.com/nlscc/samloader project. SamFetch wouldn't be possible without Samloader.
-
-    You can go /docs to see a list of endpoints along with interactive API docs.
-
-    This project is licensed with AGPLv3.
-    https://github.com/ysfchn/SamFetch
-    """
-
 CSC_CODES = json.loads(open(os.path.join("src", "csc_list.json"), "r").read())
 
 
 
-@app.get('/', response_class = PlainTextResponse)
-def home():
-    return _
-
-
-
-# Returns a list of CSC/region codes.
-@app.get('/csc')
+# /api/csc
+#
+# Returns a known list of CSC/region codes. 
+# Note that it doesn't give a warranty about having all CSC codes.
+@app.get('/api/csc', tags = ["developer"], summary = "Returns a known list of CSC/region codes.")
 def list_csc():
     """
     Returns a known list of CSC/region codes. Note that it doesn't give a warranty about having all CSC codes.
@@ -77,19 +83,20 @@ def list_csc():
     return CSC_CODES
 
 
-
-# Get the latest firmware of a specified model and region.
-@app.get('/latest')
-def get_latest_firmware(region : str, model : str):
+# /api/list
+#
+# List the available firmware versions of a specified model and region.
+# Use latest key to get latest firmware code.
+#
+# {
+#   "latest": "N920CXXU5CRL3/N920COJV4CRB3/N920CXXU5CRL1/N920CXXU5CRL3",
+#   "alternate": []
+# }
+@app.get('/api/list', tags = ["developer"], summary = "List the available firmware versions of a specified model and region.")
+def list_firmwares(region: str, model: str):
     """
-    Shows the latest firmware for the device.
-
-    **Example Response:**
-    ```json
-    {
-        "latest": "N920CXXU5CRL3/N920COJV4CRB3/N920CXXU5CRL1/N920CXXU5CRL3"
-    }
-    ```
+    List the available firmware versions of a specified model and region.
+    Use latest key to get latest firmware code.
     """
     # Request
     URL = Constants.GET_FIRMWARE_URL.format(region, model)
@@ -97,40 +104,36 @@ def get_latest_firmware(region : str, model : str):
     req = xmltodict.parse(r.text)
     # Check if model is correct by checking the "versioninfo" key.
     if "versioninfo" in req:
-        # Read latest firmware code.
-        latest = req["versioninfo"]["firmware"]["version"]["latest"]["#text"].split("/")
-        # TODO
-        # Alternative and test version will be added soon.
-        if len(latest) == 3:
-            latest.append(latest[0])
-        if latest[2] == "":
-            latest[2] = latest[0]
+        # Parse latest firmware version.
+        latest = Constants.parse_firmware(req["versioninfo"]["firmware"]["version"]["latest"]["#text"])
+        # Parse alternate firmware version.
+        # If none, it will return a empty list.
+        alternate = [Constants.parse_firmware(x["#text"]) for x in req["versioninfo"]["firmware"]["version"]["upgrade"]["value"] or []]
         # Return latest firmware.
-        return { "latest": "/".join(latest)}
+        return { "latest": latest, "alternate": alternate }
     else:
         # Raise HTTPException when device couldn't be found.
         raise HTTPException(404, "No firmware found. Please check region and model again.")
 
 
-
-@app.get('/binary')
-def get_binary_details(region : str, model : str, firmware : str):
+# /api/binary
+#
+# Gets the binary details such as filename and decrypt key.
+#
+# {
+#   "display_name": "Galaxy Note5"
+#   "size": 2530817088,
+#   "size_readable": "2.36 GB",
+#   "filename": "SM-N920C_1_20190117104840_n2lqmc6w6w_fac.zip.enc4",
+#   "path": "/neofus/9/",
+#   "encrypt_version": 4,
+#   "decrypt_key": "0727c304eea8a4d14835a4e6b02c0ce3"
+# }
+@app.get('/api/binary', tags = ["developer"], summary = "Gets the binary details such as filename and decrypt key.")
+def get_binary_details(region: str, model: str, firmware: str):
     """
-    Gets the binary details.\n
-    `firmware` is the firmware code of the device that you got from `/latest` endpoint.
-
-    **Example Response:**
-    ```json
-    {
-        "display_name": "Galaxy Note5"
-        "size": 2530817088,
-        "size_readable": "2.36 GB",
-        "filename": "SM-N920C_1_20190117104840_n2lqmc6w6w_fac.zip.enc4",
-        "path": "/neofus/9/",
-        "encrypt_version": 4,
-        "decrypt_key": "0727c304eea8a4d14835a4e6b02c0ce3"
-    }
-    ```\n
+    Gets the binary details such as filename and decrypt key.\n
+    `firmware` is the firmware code of the device that you got from `/latest` endpoint.\n\n
     `decrypt_key` is used for decrypting the file after downloading. It presents a hex string. Pass it to `/download` endpoint.
     """
     # Create new keyholder.
@@ -174,15 +177,18 @@ def get_binary_details(region : str, model : str, firmware : str):
         result["decrypt_key"] = bytearray(decrypt_key).hex()
         # Return the result
         return result
-
+    # Raise HTTPException when status is not 200.
     raise HTTPException(500, "Something went wrong when sending request to Kies servers.")
 
 
-
-@app.get('/download')
-def download_binary(filename : str, path : str, decrypt_key : str):
+# /api/download
+#
+# Downloads the firmware and decrypts the file during download automatically. 
+@app.get('/api/download', tags = ["developer"], summary = "Downloads the firmware and decrypts it.")
+def download_binary(filename: str, path: str, decrypt_key: str):
     """
-    Downloads the firmware and decrypts the file during download automatically. 
+    Downloads the firmware and decrypts the file during download automatically.\n
+    **Do not try the endpoint in the interactive API docs, because as it returns a file it doesn't work in OpenAPI.** 
     """
     # Create new keyholder.
     key = Keyholder.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
@@ -217,5 +223,21 @@ def download_binary(filename : str, path : str, decrypt_key : str):
                 media_type = "application/zip",
                 headers = { "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", "") }
             )
-    
+    # Raise HTTPException when status is not 200.
     raise HTTPException(500, "Something went wrong when sending request to Kies servers.")
+
+
+# /{region}/{model}
+#
+# Executes all required endpoints and directly starts dowloading the latest firmware with one call.
+# It is useful for end-users who don't want to integrate the API in a client app.
+@app.get('/{region}/{model}', tags = ["end-user"], summary = "Download latest firmware directly for end-users.")
+def automatic_download(region: str, model: str):
+    """
+    Executes all required endpoints and directly starts dowloading the latest firmware with one call.\n
+    It is useful for end-users who don't want to integrate the API in a client app.\n
+    **Do not try the endpoint in the interactive API docs, because as it returns a file it doesn't work in OpenAPI.** 
+    """
+    version = list_firmwares(region, model)
+    binary = get_binary_details(region, model, version["latest"])
+    return download_binary(binary["filename"], binary["path"], binary["decrypt_key"])
