@@ -105,7 +105,9 @@ def list_firmwares(region: str, model: str):
     # Check if model is correct by checking the "versioninfo" key.
     if "versioninfo" in req:
         # Parse latest firmware version.
-        latest = Constants.parse_firmware(req["versioninfo"]["firmware"]["version"]["latest"]["#text"])
+        l = req["versioninfo"]["firmware"]["version"]["latest"]
+        # If the latest field is dictionary, get the inner text, otherwise get its value directly.
+        latest = Constants.parse_firmware(l if isinstance(l, str) else l["#text"])
         # Parse alternate firmware version.
         # If none, it will return a empty list.
         alternate = [Constants.parse_firmware(x["#text"]) for x in req["versioninfo"]["firmware"]["version"]["upgrade"]["value"] or []]
@@ -158,6 +160,7 @@ def get_binary_details(region: str, model: str, firmware: str):
             "size": int(r["FUSMsg"]["FUSBody"]["Put"]["BINARY_BYTE_SIZE"]["Data"]),
             "filename": r["FUSMsg"]["FUSBody"]["Put"]["BINARY_NAME"]["Data"],
             "path": r["FUSMsg"]["FUSBody"]["Put"]["MODEL_PATH"]["Data"],
+            "version": r["FUSMsg"]["FUSBody"]["Put"]["CURRENT_OS_VERSION"]["Data"].replace("(", " ("),
             # "crc": r["FUSMsg"]["FUSBody"]["Put"]["BINARY_CRC"]["Data"],
             # CRC won't be included until the issue has resolved.
             # https://github.com/ysfchn/SamFetch/issues/1
@@ -188,7 +191,7 @@ def get_binary_details(region: str, model: str, firmware: str):
 def download_binary(filename: str, path: str, decrypt_key: str):
     """
     Downloads the firmware and decrypts the file during download automatically.\n
-    **Do not try the endpoint in the interactive API docs, because as it returns a file it doesn't work in OpenAPI.** 
+    **Do not try the endpoint in the interactive API docs, because as it returns a file, it doesn't work in OpenAPI.** 
     """
     # Create new keyholder.
     key = Keyholder.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
@@ -236,7 +239,7 @@ def automatic_download(region: str, model: str):
     """
     Executes all required endpoints and directly starts dowloading the latest firmware with one call.\n
     It is useful for end-users who don't want to integrate the API in a client app.\n
-    **Do not try the endpoint in the interactive API docs, because as it returns a file it doesn't work in OpenAPI.** 
+    **Do not try the endpoint in the interactive API docs, because as it returns a file, it doesn't work in OpenAPI.** 
     """
     version = list_firmwares(region, model)
     binary = get_binary_details(region, model, version["latest"])
