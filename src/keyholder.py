@@ -15,7 +15,7 @@ class Keyholder:
             self.nonce = Crypto.decrypt_nonce(self.encrypted_nonce)
             self.auth = Crypto.get_auth(self.nonce)
         else:
-            raise HTTPException(401, "Token is not found in cookies. Please grab new one with /auth")
+            raise HTTPException(401, "Something went wrong with authorization. This is related to Kies servers, not you.")
 
     @staticmethod
     def from_dict(keyholder : dict) -> Any:

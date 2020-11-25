@@ -8,6 +8,7 @@ import os
 # Helper modules
 from src.keyholder import Keyholder
 from src.constants import Constants
+from src.crypto import Crypto
 
 # FastAPI
 from fastapi import FastAPI, HTTPException
@@ -53,19 +54,49 @@ class Decryptor:
     A custom iterator to decrypt the bytes without writing the whole file to the disk.
     """
 
-    def __init__(self, response: Iterator, key: str):
-        self.file_iterator = response
+    def __init__(self, response: requests.Response, key: str):
+        self.iterator : Iterator = response.iter_content(chunk_size = 0x10000)
+        # We need to unpad (basically modify) the last chunk,
+        # so we need to learn when will the iterator end.
+        # Because of that, we hold next chunks too.
+        self.chunks = [next(self.iterator), None]
         self.cipher = AES.new(key, AES.MODE_ECB)
 
     def __iter__(self):
         return self
 
+    def move(self):
+        chunk = next(self.iterator, None)
+        self.chunks = [chunk, self.chunks[0]]
+
+    def is_end(self):
+        return self.chunks[0] == None 
+
+    def is_start(self):
+        return self.chunks[1] == None
+
+    def is_end_exceed(self):
+        return self.chunks[0] == None and self.chunks[1] == None
+
     def __next__(self):
-        chunk = next(self.file_iterator, None)
-        if chunk == None:
+        # Get the current chunk.
+        current = self.chunks[1]
+        returned = None
+        # Check if ending point exceed.
+        if self.is_end_exceed():
             raise StopIteration
+        # Check if the chunk is starting point.
+        if self.is_start():
+            returned = b""
+        # Check if the chunk is ending point.
+        elif self.is_end():
+            returned = Crypto.unpad(self.cipher.decrypt(current))
         else:
-            return self.cipher.decrypt(chunk)
+            returned = self.cipher.decrypt(current)
+        # Shift to the next chunk and keep the previous one.
+        self.move()
+        return returned
+
 
 CSC_CODES = json.loads(open(os.path.join("src", "csc_list.json"), "r").read())
 
@@ -106,6 +137,9 @@ def list_firmwares(region: str, model: str):
     if "versioninfo" in req:
         # Parse latest firmware version.
         l = req["versioninfo"]["firmware"]["version"]["latest"]
+        # Check if value is None.
+        if l == None:
+            raise HTTPException(404, "No firmware found. Please check region and model again.")
         # If the latest field is dictionary, get the inner text, otherwise get its value directly.
         latest = Constants.parse_firmware(l if isinstance(l, str) else l["#text"])
         # Parse alternate firmware version.
@@ -161,9 +195,6 @@ def get_binary_details(region: str, model: str, firmware: str):
             "filename": r["FUSMsg"]["FUSBody"]["Put"]["BINARY_NAME"]["Data"],
             "path": r["FUSMsg"]["FUSBody"]["Put"]["MODEL_PATH"]["Data"],
             "version": r["FUSMsg"]["FUSBody"]["Put"]["CURRENT_OS_VERSION"]["Data"].replace("(", " ("),
-            # "crc": r["FUSMsg"]["FUSBody"]["Put"]["BINARY_CRC"]["Data"],
-            # CRC won't be included until the issue has resolved.
-            # https://github.com/ysfchn/SamFetch/issues/1
             "encrypt_version": 4 if str(r["FUSMsg"]["FUSBody"]["Put"]["BINARY_NAME"]["Data"]).endswith("4") else 2,
         }
         result["size_readable"] = "{:.2f} GB".format(float(result["size"]) / 1024 / 1024 / 1024)
@@ -222,7 +253,7 @@ def download_binary(filename: str, path: str, decrypt_key: str):
             # Decrypt bytes while downloading the file.
             # So this way, we can directly serve the bytes to the client without downloading to the disk.
             return StreamingResponse(
-                Decryptor(req2.iter_content(chunk_size = 0x10000), bytes(bytearray.fromhex(decrypt_key))), 
+                Decryptor(req2, bytes(bytearray.fromhex(decrypt_key))), 
                 media_type = "application/zip",
                 headers = { "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", "") }
             )
