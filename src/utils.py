@@ -1,8 +1,10 @@
+from typing import Iterator
 import dicttoxml
+from src.crypto import Crypto
+from Crypto.Cipher import AES
 
 
 class Constants:
-
     # Get firmware information url
     GET_FIRMWARE_URL = "http://fota-cloud-dn.ospserver.net/firmware/{0}/{1}/version.xml"
 
@@ -72,3 +74,55 @@ class Constants:
             return "/".join(l)
         else:
             return None
+
+
+# A custom iterator to decrypt the bytes without writing the whole file to the disk
+# for downloading firmwares.
+class Decryptor:
+    """
+    A custom iterator to decrypt the bytes without writing the whole file to the disk 
+    for downloading firmwares.
+    """
+
+    def __init__(self, response, key: str):
+        self.iterator : Iterator = response.iter_content(chunk_size = 0x10000)
+        # We need to unpad (basically modify) the last chunk,
+        # so we need to learn when will the iterator end.
+        # Because of that, we hold next chunks too.
+        self.chunks = [next(self.iterator), None]
+        self.cipher = AES.new(key, AES.MODE_ECB)
+
+    def __iter__(self):
+        return self
+
+    def move(self):
+        chunk = next(self.iterator, None)
+        self.chunks = [chunk, self.chunks[0]]
+
+    def is_end(self):
+        return self.chunks[0] == None 
+
+    def is_start(self):
+        return self.chunks[1] == None
+
+    def is_end_exceed(self):
+        return self.chunks[0] == None and self.chunks[1] == None
+
+    def __next__(self):
+        # Get the current chunk.
+        current = self.chunks[1]
+        returned = None
+        # Check if ending point exceed.
+        if self.is_end_exceed():
+            raise StopIteration
+        # Check if the chunk is starting point.
+        if self.is_start():
+            returned = b""
+        # Check if the chunk is ending point.
+        elif self.is_end():
+            returned = Crypto.unpad(self.cipher.decrypt(current))
+        else:
+            returned = self.cipher.decrypt(current)
+        # Shift to the next chunk and keep the previous one.
+        self.move()
+        return returned
