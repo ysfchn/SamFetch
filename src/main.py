@@ -198,6 +198,9 @@ def download_binary(filename: str, path: str, decrypt_key: str):
                 cookies = Constants.COOKIES(key.session_id),
                 stream = True
             )
+            if req2.status_code != 200:
+                # Raise HTTPException when status is not 200.
+                raise HTTPException(500, "Looks like Kies doesn't allow us to download the file since they changed their methods. SamFetch will be updated as soon as possible until a new fix has been discovered.")
             # Decrypt bytes while downloading the file.
             # So this way, we can directly serve the bytes to the client without downloading to the disk.
             return StreamingResponse(
