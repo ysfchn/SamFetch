@@ -193,7 +193,7 @@ def download_binary(filename: str, path: str, decrypt_key: str):
         else:
             req2 = requests.get(
                 url = Constants.BINARY_DOWNLOAD_URL,
-                params = {"file": path + filename},
+                params = "file=" + path + filename,
                 headers = Constants.HEADERS(key.encrypted_nonce, key.auth),
                 cookies = Constants.COOKIES(key.session_id),
                 stream = True
