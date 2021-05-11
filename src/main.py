@@ -1,15 +1,16 @@
-from typing import Iterator
+from typing import Iterator, Optional
 import xmltodict
 import requests
 import json
 import os
 
 # Helper modules
-from src.keyholder import Keyholder
-from src.utils import Constants, Decryptor
+from src.session import Session
+from src.csc_list import CSC
+from src.utils import Constants, Decryptor, KiesData
 
 # FastAPI
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -46,10 +47,6 @@ app.add_middleware(
 )
 
 
-CSC_CODES = json.loads(open(os.path.join("src", "csc_list.json"), "r").read())
-
-
-
 # /api/csc
 #
 # Returns a known list of CSC/region codes. 
@@ -59,7 +56,7 @@ def list_csc():
     """
     Returns a known list of CSC/region codes. Note that it doesn't give a warranty about having all CSC codes.
     """
-    return CSC_CODES
+    return CSC
 
 
 # /api/list
@@ -72,7 +69,7 @@ def list_csc():
 #   "alternate": []
 # }
 @app.get('/api/list', tags = ["developer"], summary = "List the available firmware versions of a specified model and region.")
-def list_firmwares(region: str, model: str):
+async def list_firmwares(region: str, model: str):
     """
     List the available firmware versions of a specified model and region.
     Use latest key to get latest firmware code.
@@ -80,24 +77,29 @@ def list_firmwares(region: str, model: str):
     # Request
     URL = Constants.GET_FIRMWARE_URL.format(region, model)
     r = requests.get(URL)
-    req = xmltodict.parse(r.text)
+    # Check status.
+    if r.status_code != 200:
+        # Raise HTTPException when device couldn't be found.
+        raise HTTPException(r.status_code, f"The service returned {r.status_code}. Maybe parameters are invalid?")
+    req = xmltodict.parse(r.text, dict_constructor=dict)
     # Check if model is correct by checking the "versioninfo" key.
     if "versioninfo" in req:
         # Parse latest firmware version.
-        l = req["versioninfo"]["firmware"]["version"]["latest"]
+        versions = req["versioninfo"]["firmware"]["version"]
         # Check if value is None.
-        if l == None:
-            raise HTTPException(404, "No firmware found. Please check region and model again.")
-        # If the latest field is dictionary, get the inner text, otherwise get its value directly.
-        latest = Constants.parse_firmware(l if isinstance(l, str) else l["#text"])
-        # Parse alternate firmware version.
-        # If none, it will return a empty list.
-        alternate = [Constants.parse_firmware(x["#text"]) for x in req["versioninfo"]["firmware"]["version"]["upgrade"]["value"] or []]
-        # Return latest firmware.
-        return { "latest": latest, "alternate": alternate }
+        if not versions.get("latest"):
+            raise HTTPException(404, "No firmware found. Maybe parameters are invalid?")
+        # Return the firmware data.
+        return {
+            # The are cases that "latest" key may return a dictionary or just a string in different regions and models.
+            # If the "latest" field is dictionary, get the inner text, otherwise get its value directly.
+            "latest": Constants.parse_firmware(versions["latest"] if isinstance(versions, str) else versions["latest"]["#text"]),
+            # Some devices may contain alternate/older versions too, so include them with the response.
+            "alternate": [Constants.parse_firmware(x["#text"]) for x in versions["upgrade"]["value"] or []]
+        }
     else:
         # Raise HTTPException when device couldn't be found.
-        raise HTTPException(404, "No firmware found. Please check region and model again.")
+        raise HTTPException(404, "No firmware found. Maybe parameters are invalid?")
 
 
 # /api/binary
@@ -114,14 +116,14 @@ def list_firmwares(region: str, model: str):
 #   "decrypt_key": "0727c304eea8a4d14835a4e6b02c0ce3"
 # }
 @app.get('/api/binary', tags = ["developer"], summary = "Gets the binary details such as filename and decrypt key.")
-def get_binary_details(region: str, model: str, firmware: str):
+async def get_binary_details(region: str, model: str, firmware: str):
     """
     Gets the binary details such as filename and decrypt key.\n
     `firmware` is the firmware code of the device that you got from `/latest` endpoint.\n\n
     `decrypt_key` is used for decrypting the file after downloading. It presents a hex string. Pass it to `/download` endpoint.
     """
-    # Create new keyholder.
-    key = Keyholder.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
+    # Create new session.
+    key = Session.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
     # Make the request.
     req = requests.post(
         url = Constants.BINARY_INFO_URL,
@@ -129,36 +131,32 @@ def get_binary_details(region: str, model: str, firmware: str):
         headers = Constants.HEADERS(key.encrypted_nonce, key.auth),
         cookies = Constants.COOKIES(key.session_id)
     )
-
     # Read the request.
     if req.status_code == 200:
-        r = xmltodict.parse(req.text)
+        data = KiesData(req.text)
         # Return error when binary couldn't be found.
-        if r["FUSMsg"]["FUSBody"]["Results"]["Status"] != "200":
+        if data.status_code != "200":
             raise HTTPException(400, "Firmware couldn't be found.")
+        # If file extension ends with .enc4 that means it is using version 4 encryption, otherwise 2 (.enc2).
+        _encrypt_version = 4 if str(data.body["BINARY_NAME"]).endswith("4") else 2
         # Get binary details
-        result = {
-            "display_name": r["FUSMsg"]["FUSBody"]["Put"]["DEVICE_MODEL_DISPLAYNAME"]["Data"],
-            "size": int(r["FUSMsg"]["FUSBody"]["Put"]["BINARY_BYTE_SIZE"]["Data"]),
-            "filename": r["FUSMsg"]["FUSBody"]["Put"]["BINARY_NAME"]["Data"],
-            "path": r["FUSMsg"]["FUSBody"]["Put"]["MODEL_PATH"]["Data"],
-            "version": r["FUSMsg"]["FUSBody"]["Put"]["CURRENT_OS_VERSION"]["Data"].replace("(", " ("),
-            "encrypt_version": 4 if str(r["FUSMsg"]["FUSBody"]["Put"]["BINARY_NAME"]["Data"]).endswith("4") else 2,
+        return {
+            "display_name": data.body["DEVICE_MODEL_DISPLAYNAME"],
+            "size": int(data.body["BINARY_BYTE_SIZE"]),
+            "filename": data.body["BINARY_NAME"],
+            "path": data.body["MODEL_PATH"],
+            "version": data.body["CURRENT_OS_VERSION"].replace("(", " ("),
+            "encrypt_version": _encrypt_version,
+            # Convert bytes to GB, so it will be more readable for an end-user.
+            "size_readable": "{:.2f} GB".format(float(data.body["BINARY_BYTE_SIZE"]) / 1024 / 1024 / 1024),
+            # Generate decrypted key for decrypting the file after downloading.
+            # Decrypt key gives a list of bytes, but as it is not possible to send as query parameter, 
+            # we are converting it to a single HEX value.
+            "decrypt_key": \
+                key.getv2key(firmware, model, region).hex() if _encrypt_version == 2 else \
+                key.getv4key(data.body["LATEST_FW_VERSION"], data.body["LOGIC_VALUE_FACTORY"]).hex(),
+            "firmware_catalog_url": data.body["DESCRIPTION"]
         }
-        result["size_readable"] = "{:.2f} GB".format(float(result["size"]) / 1024 / 1024 / 1024)
-        decrypt_key = ""
-        # Generate decrypted key for decrypting the file after downloading.
-        # If file extension ends with .enc4 that means it is using version 4, otherwise 2 (.enc2).
-        if result["encrypt_version"] == 4:
-            firmware_ver = r["FUSMsg"]["FUSBody"]["Results"]["LATEST_FW_VERSION"]["Data"]
-            logic_value = r["FUSMsg"]["FUSBody"]["Put"]["LOGIC_VALUE_FACTORY"]["Data"]
-            decrypt_key = key.getv4key(firmware_ver, logic_value)
-        else:
-            decrypt_key = key.getv2key(firmware, model, region)
-        # Save decrypt key.
-        result["decrypt_key"] = bytearray(decrypt_key).hex()
-        # Return the result
-        return result
     # Raise HTTPException when status is not 200.
     raise HTTPException(500, "Something went wrong when sending request to Kies servers.")
 
@@ -167,13 +165,13 @@ def get_binary_details(region: str, model: str, firmware: str):
 #
 # Downloads the firmware and decrypts the file during download automatically. 
 @app.get('/api/download', tags = ["developer"], summary = "Downloads the firmware and decrypts it.")
-def download_binary(filename: str, path: str, decrypt_key: str):
+async def download_binary(filename: str, path: str, decrypt_key: str, request : Request):
     """
     Downloads the firmware and decrypts the file during download automatically.\n
     **Do not try the endpoint in the interactive API docs, because as it returns a file, it doesn't work in OpenAPI.** 
     """
-    # Create new keyholder.
-    key = Keyholder.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
+    # Create new session.
+    key = Session.from_response(requests.post(Constants.NONCE_URL, headers = Constants.HEADERS()))
     # Make the request.
     req = requests.post(
         url = Constants.BINARY_FILE_URL,
@@ -181,20 +179,26 @@ def download_binary(filename: str, path: str, decrypt_key: str):
         headers = Constants.HEADERS(key.encrypted_nonce, key.auth),
         cookies = Constants.COOKIES(key.session_id)
     )
-    # Refresh keyholder.
-    key.refresh_keyholder(req)
-    # Return error when binary couldn't be found.
+    # Refresh session.
+    key.refresh_session(req)
+    # Read the request.
     if req.status_code == 200:
-        r = xmltodict.parse(req.text)
-        status_code = r["FUSMsg"]["FUSBody"]["Results"]["Status"]
-        if status_code != "200":
-            raise HTTPException(int(status_code), f"The service returned {status_code}. Maybe firmware couldn't be found?")
-        # Else, return true.
+        data = KiesData(req.text)
+        # Return error when binary couldn't be found.
+        if data.status_code != "200":
+            raise HTTPException(int(data.status_code), f"The service returned {data.status_code}. Maybe parameters are invalid?")
+        # Else, make another request to get the binary.
         else:
+            # Create headers.
+            _headers = Constants.HEADERS(key.encrypted_nonce, key.auth)
+            # If incoming request contains a Range header, directly pass it to request.
+            if "Range" in _headers:
+                _headers["Range"] = request.headers["Range"]
+            # Another request for streaming the firmware.
             req2 = requests.get(
                 url = Constants.BINARY_DOWNLOAD_URL,
                 params = "file=" + path + filename,
-                headers = Constants.HEADERS(key.encrypted_nonce, key.auth),
+                headers = _headers,
                 cookies = Constants.COOKIES(key.session_id),
                 stream = True
             )
@@ -204,9 +208,13 @@ def download_binary(filename: str, path: str, decrypt_key: str):
             # Decrypt bytes while downloading the file.
             # So this way, we can directly serve the bytes to the client without downloading to the disk.
             return StreamingResponse(
-                Decryptor(req2, bytes(bytearray.fromhex(decrypt_key))), 
+                Decryptor(req2, bytes.fromhex(decrypt_key)), 
                 media_type = "application/zip",
-                headers = { "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", "") }
+                headers = { 
+                    "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", ""),
+                    "Content-Length": req2.headers["Content-Length"],
+                    "Content-Range": _headers.get("Range", "bytes=0-")
+                }
             )
     # Raise HTTPException when status is not 200.
     raise HTTPException(500, "Something went wrong when sending request to Kies servers.")
@@ -217,12 +225,12 @@ def download_binary(filename: str, path: str, decrypt_key: str):
 # Executes all required endpoints and directly starts dowloading the latest firmware with one call.
 # It is useful for end-users who don't want to integrate the API in a client app.
 @app.get('/{region}/{model}', tags = ["end-user"], summary = "Download latest firmware directly for end-users.")
-def automatic_download(region: str, model: str):
+async def automatic_download(region: str, model: str, request : Request):
     """
     Executes all required endpoints and directly starts dowloading the latest firmware with one call.\n
     It is useful for end-users who don't want to integrate the API in a client app.\n
     **Do not try the endpoint in the interactive API docs, because as it returns a file, it doesn't work in OpenAPI.** 
     """
-    version = list_firmwares(region, model)
-    binary = get_binary_details(region, model, version["latest"])
-    return download_binary(binary["filename"], binary["path"], binary["decrypt_key"])
+    version = await list_firmwares(region, model)
+    binary = await get_binary_details(region, model, version["latest"])
+    return await download_binary(binary["filename"], binary["path"], binary["decrypt_key"], request)
