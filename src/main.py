@@ -93,7 +93,7 @@ async def list_firmwares(region: str, model: str):
         return {
             # The are cases that "latest" key may return a dictionary or just a string in different regions and models.
             # If the "latest" field is dictionary, get the inner text, otherwise get its value directly.
-            "latest": Constants.parse_firmware(versions["latest"] if isinstance(versions, str) else versions["latest"]["#text"]),
+            "latest": Constants.parse_firmware(versions["latest"] if isinstance(versions["latest"], str) else versions["latest"]["#text"]),
             # Some devices may contain alternate/older versions too, so include them with the response.
             "alternate": [Constants.parse_firmware(x["#text"]) for x in versions["upgrade"]["value"] or []]
         }
@@ -204,16 +204,19 @@ async def download_binary(filename: str, path: str, decrypt_key: str, request : 
             )
             if req2.status_code != 200:
                 # Raise HTTPException when status is not 200.
-                raise HTTPException(500, "Looks like Kies doesn't allow us to download the file since they changed their methods. SamFetch will be updated as soon as possible until a new fix has been discovered.")
+                raise HTTPException(req2.status_code, f"The service returned {data.status_code}. Maybe parameters are invalid?")
             # Decrypt bytes while downloading the file.
             # So this way, we can directly serve the bytes to the client without downloading to the disk.
+            print(req2.headers["Content-Length"])
             return StreamingResponse(
                 Decryptor(req2, bytes.fromhex(decrypt_key)), 
                 media_type = "application/zip",
                 headers = { 
                     "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", ""),
-                    "Content-Length": req2.headers["Content-Length"],
-                    "Content-Range": _headers.get("Range", "bytes=0-")
+                    # Substract 10 bytes from total file size.
+                    "Content-Length": str(int(req2.headers["Content-Length"]) - 10),
+                    "Accept-Ranges": "bytes",
+                    "Content-Range": _headers.get("Range", "bytes=0-" + req2.headers["Content-Length"])
                 }
             )
     # Raise HTTPException when status is not 200.
