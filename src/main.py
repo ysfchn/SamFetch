@@ -189,11 +189,13 @@ async def download_binary(filename: str, path: str, decrypt_key: str, request : 
             raise HTTPException(int(data.status_code), f"The service returned {data.status_code}. Maybe parameters are invalid?")
         # Else, make another request to get the binary.
         else:
+            # If Range header has provided, set Range.
+            RANGE = request.headers.get("Range", 0)
             # Create headers.
             _headers = Constants.HEADERS(key.encrypted_nonce, key.auth)
             # If incoming request contains a Range header, directly pass it to request.
-            if "Range" in _headers:
-                _headers["Range"] = request.headers["Range"]
+            if RANGE:
+                _headers["Range"] = RANGE
             # Another request for streaming the firmware.
             req2 = requests.get(
                 url = Constants.BINARY_DOWNLOAD_URL,
@@ -202,21 +204,22 @@ async def download_binary(filename: str, path: str, decrypt_key: str, request : 
                 cookies = Constants.COOKIES(key.session_id),
                 stream = True
             )
+            # Get the total size of binary.
+            CONTENT_LENGTH = int(req2.headers["Content-Length"]) - 10
+            # Check if status code is not 200.
             if req2.status_code != 200:
                 # Raise HTTPException when status is not 200.
                 raise HTTPException(req2.status_code, f"The service returned {data.status_code}. Maybe parameters are invalid?")
             # Decrypt bytes while downloading the file.
             # So this way, we can directly serve the bytes to the client without downloading to the disk.
-            print(req2.headers["Content-Length"])
             return StreamingResponse(
                 Decryptor(req2, bytes.fromhex(decrypt_key)), 
                 media_type = "application/zip",
                 headers = { 
                     "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", ""),
-                    # Substract 10 bytes from total file size.
-                    "Content-Length": str(int(req2.headers["Content-Length"]) - 10),
+                    "Content-Length": str(CONTENT_LENGTH - RANGE),
                     "Accept-Ranges": "bytes",
-                    "Content-Range": _headers.get("Range", "bytes=0-" + req2.headers["Content-Length"])
+                    "Content-Range": f"bytes={RANGE}-"
                 }
             )
     # Raise HTTPException when status is not 200.
