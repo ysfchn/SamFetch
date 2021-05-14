@@ -193,11 +193,12 @@ async def download_binary(filename: str, path: str, decrypt_key: str, request : 
             START_RANGE, END_RANGE = (0, 0) if "Range" not in request.headers else Constants.parse_range_header(request.headers["Range"])
             # Check if range is invalid.
             if START_RANGE == -2 or END_RANGE == -2:
-                raise HTTPException(416, "Range is invalid. If you didn't meant input a 'Range' header, remove it.")
+                raise HTTPException(416, "Range is invalid. If you didn't meant input a 'Range' header, remove it from request.")
             # Create headers.
             _headers = Constants.HEADERS(key.encrypted_nonce, key.auth)
             # If incoming request contains a Range header, directly pass it to request.
-            _headers["Range"] = "bytes=" + Constants.make_range_header(START_RANGE, END_RANGE)
+            if "Range" in _headers:
+                _headers["Range"] = "bytes=" + Constants.make_range_header(START_RANGE, END_RANGE)
             # Another request for streaming the firmware.
             req2 = requests.get(
                 url = Constants.BINARY_DOWNLOAD_URL,
@@ -206,9 +207,9 @@ async def download_binary(filename: str, path: str, decrypt_key: str, request : 
                 cookies = Constants.COOKIES(key.session_id),
                 stream = True
             )
-            # Check if status code is not 200.
+            # Check if status code is not 200 or 206.
             if req2.status_code not in [200, 206]:
-                # Raise HTTPException when status is not 200.
+                # Raise HTTPException when status is not success.
                 raise HTTPException(req2.status_code, f"The service returned {req2.status_code}. Maybe parameters are invalid?")
             # Get the total size of binary.
             CONTENT_LENGTH = int(req2.headers["Content-Length"]) - 10
