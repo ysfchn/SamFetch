@@ -1,8 +1,9 @@
-from typing import Iterator
+from typing import Iterator, Tuple
 import dicttoxml
 from src.crypto import Crypto
 from Crypto.Cipher import AES
 import xmltodict
+import re
 
 
 class KiesData:
@@ -93,6 +94,17 @@ class Constants:
             return "/".join(l)
         else:
             return None
+
+    # Parse range header.
+    # Returns -2 if range is invalid.
+    def parse_range_header(header: str) -> Tuple[int, int]:
+        _match = re.findall(r"^bytes=(\d+)-(\d*)?$", header, flags = re.MULTILINE)
+        if len(_match) != 1:
+            return -1, -1
+        return int(_match[0][0]), 0 if not _match[0][1] else int(_match[0][1])
+
+    def make_range_header(start : int, end : int) -> str:
+        return (str(start) if start else "0") + "-" + (str(end) if end else "")
 
 
 # A custom iterator to decrypt the bytes without writing the whole file to the disk
