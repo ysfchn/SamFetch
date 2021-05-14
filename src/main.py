@@ -87,7 +87,7 @@ async def list_firmwares(region: str, model: str):
         # Parse latest firmware version.
         versions = req["versioninfo"]["firmware"]["version"]
         # Check if value is None.
-        if not versions.get("latest"):
+        if (not versions.get("latest")) or (isinstance(versions["latest"], dict) and "#text" not in versions["latest"]):
             raise HTTPException(404, "No firmware found. Maybe parameters are invalid?")
         # Return the firmware data.
         return {
@@ -138,7 +138,7 @@ async def get_binary_details(region: str, model: str, firmware: str):
         if data.status_code != "200":
             raise HTTPException(400, "Firmware couldn't be found.")
         # If file extension ends with .enc4 that means it is using version 4 encryption, otherwise 2 (.enc2).
-        _encrypt_version = 4 if str(data.body["BINARY_NAME"]).endswith("4") else 2
+        ENCRYPT_VERSION = 4 if str(data.body["BINARY_NAME"]).endswith("4") else 2
         # Get binary details
         return {
             "display_name": data.body["DEVICE_MODEL_DISPLAYNAME"],
@@ -146,15 +146,17 @@ async def get_binary_details(region: str, model: str, firmware: str):
             "filename": data.body["BINARY_NAME"],
             "path": data.body["MODEL_PATH"],
             "version": data.body["CURRENT_OS_VERSION"].replace("(", " ("),
-            "encrypt_version": _encrypt_version,
+            "encrypt_version": ENCRYPT_VERSION,
             # Convert bytes to GB, so it will be more readable for an end-user.
             "size_readable": "{:.2f} GB".format(float(data.body["BINARY_BYTE_SIZE"]) / 1024 / 1024 / 1024),
             # Generate decrypted key for decrypting the file after downloading.
             # Decrypt key gives a list of bytes, but as it is not possible to send as query parameter, 
             # we are converting it to a single HEX value.
             "decrypt_key": \
-                key.getv2key(firmware, model, region).hex() if _encrypt_version == 2 else \
+                key.getv2key(firmware, model, region).hex() if ENCRYPT_VERSION == 2 else \
                 key.getv4key(data.body["LATEST_FW_VERSION"], data.body["LOGIC_VALUE_FACTORY"]).hex(),
+            # A URL of samsungmobile that includes release changelogs.
+            # Not available for every device.
             "firmware_catalog_url": data.body["DESCRIPTION"]
         }
     # Raise HTTPException when status is not 200.

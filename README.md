@@ -13,7 +13,7 @@ After typing your app name, deploy the app and your instance will be ready! Head
 
 | ⚠ **WARNING** |
 |:--------------|
-| Due to a change in Samsung Kies servers, you can only download the latest firmware even if you asked for a older firmware. This is not related to SamFetch.<br>[Issue Link](https://github.com/ysfchn/SamFetch/issues/6) |
+| Due to a change in Samsung Kies servers, you can only download the latest firmware even if you asked for an older firmware. [This is not related to SamFetch.](https://github.com/ysfchn/SamFetch/issues/6) |
 
 ## Features
 
