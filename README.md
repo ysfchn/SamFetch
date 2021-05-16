@@ -23,7 +23,22 @@ After typing your app name, deploy the app and your instance will be ready! Head
 
 * It doesn't have any background jobs/queue for downloading and decrypting the firmware, so this means the firmware file will directly stream to your browser / your download client, while decrypting the chunks. 
 
-* SamFetch supports partial downloads which means it supports pausing and resuming the download in your download client / browser's own downloader.
+* SamFetch supports partial downloads ("Range" header) which means it supports pausing and resuming the download in your download client / browser's own downloader. 
+
+    ⚠ Note that pausing and resuming the download may end up with corrupted downloads in some download clients due to their handling with the headers. If you find a universal method that will work for all download clients, feel free to create a new PR.
+
+### Verifing the files
+
+* There is currently no way to verify if the downloaded files are downloaded correctly. Because Samsung (Kies) servers only gives a CRC value which is for encrypted file, but as SamFetch decrypts the file while sending it to user, it is not possible to know the hash of the firmware without downloading it fully.
+
+* Also, SamFetch adds 1 empty byte to start and 10 empty bytes to end of the file, so this may cause inconsistency when comparing hashes of firmware files which downloaded from somewhere else. Don't worry, this won't corrupt the firmware files as these bytes are empty.
+
+    The reason behind about adding empty bytes is, 
+    
+    * The first empty byte is added for checking if download has finished before sending it to user. Because the last chunk requires additional decrypting, so SamFetch needs to go 1 step early from the user.
+
+    * The last 10 empty bytes are added for preventing the inconsistency in file size. As mentioned before, the last chunk requires additional decrypting. In result of decrypting the last chunk, it makes the file 10 bytes smaller. However, this is not good at all because it won't work correctly when downloading the file with download managers. Download managers sets a "Range" header to requests which specifies the range in bytes such as 0-1023, so they expect these bytes without more or less.
+
 
 ## Credits
 

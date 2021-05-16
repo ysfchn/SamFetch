@@ -157,7 +157,8 @@ async def get_binary_details(region: str, model: str, firmware: str):
                 key.getv4key(data.body["LATEST_FW_VERSION"], data.body["LOGIC_VALUE_FACTORY"]).hex(),
             # A URL of samsungmobile that includes release changelogs.
             # Not available for every device.
-            "firmware_catalog_url": data.body["DESCRIPTION"]
+            "firmware_changelog_url": data.body["DESCRIPTION"],
+            "platform": data.body["DEVICE_PLATFORM"]
         }
     # Raise HTTPException when status is not 200.
     raise HTTPException(500, "Something went wrong when sending request to Kies servers.")
@@ -194,7 +195,7 @@ async def download_binary(filename: str, path: str, decrypt_key: str, request : 
             # Check and parse the range header.
             START_RANGE, END_RANGE = (0, 0) if "Range" not in request.headers else Constants.parse_range_header(request.headers["Range"])
             # Check if range is invalid.
-            if START_RANGE == -2 or END_RANGE == -2:
+            if START_RANGE == -1 or END_RANGE == -1:
                 raise HTTPException(416, "Range is invalid. If you didn't meant input a 'Range' header, remove it from request.")
             # Create headers.
             _headers = Constants.HEADERS(key.encrypted_nonce, key.auth)
@@ -214,7 +215,7 @@ async def download_binary(filename: str, path: str, decrypt_key: str, request : 
                 # Raise HTTPException when status is not success.
                 raise HTTPException(req2.status_code, f"The service returned {req2.status_code}. Maybe parameters are invalid?")
             # Get the total size of binary.
-            CONTENT_LENGTH = int(req2.headers["Content-Length"]) - 10
+            CONTENT_LENGTH = int(req2.headers["Content-Length"])
             # Decrypt bytes while downloading the file.
             # So this way, we can directly serve the bytes to the client without downloading to the disk.
             return StreamingResponse(

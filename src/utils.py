@@ -101,7 +101,11 @@ class Constants:
         _match = re.findall(r"^bytes=(\d+)-(\d*)?$", header, flags = re.MULTILINE)
         if len(_match) != 1:
             return -1, -1
-        return int(_match[0][0]), 0 if not _match[0][1] else int(_match[0][1])
+        sizes = {
+            "START": int(_match[0][0]),
+            "END": 0 if not _match[0][1] else int(_match[0][1])
+        }
+        return sizes["START"], sizes["END"]
 
     def make_range_header(start : int, end : int) -> str:
         return (str(start) if start else "0") + "-" + (str(end) if end else "")
@@ -154,10 +158,10 @@ class Decryptor:
             raise StopIteration
         # Check if the chunk is starting point.
         if self.is_start:
-            returned = b""
+            returned = bytes(0)
         # Check if the chunk is ending point.
         elif self.is_end:
-            returned = Crypto.unpad(self.cipher.decrypt(current))
+            returned = Crypto.unpad(self.cipher.decrypt(current)) + bytes([0] * 10)
         else:
             returned = self.cipher.decrypt(current)
         # Shift to the next chunk and keep the previous one.
