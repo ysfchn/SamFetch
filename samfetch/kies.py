@@ -165,8 +165,8 @@ class KiesRequest:
             headers["Range"] = custom_range
         return httpx.Request(
             "GET",
-            KiesConstants.BINARY_DOWNLOAD_URL,
-            params = f"file={path}",
+            KiesConstants.BINARY_DOWNLOAD_URL + "?file=" + path,
+            # params = f"file={path}",
             headers = headers,
             cookies = KiesConstants.COOKIES(session.session_id)
         )

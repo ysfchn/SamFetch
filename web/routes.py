@@ -3,14 +3,14 @@ __all__ = ["bp"]
 from sanic import Blueprint
 from sanic.exceptions import SanicException
 from sanic.request import Request
-from sanic.response import json, stream
+from json import loads
+from sanic.response import json, redirect, stream
 from samfetch.csc import CSC
 from samfetch.kies import KiesData, KiesRequest, KiesUtils
 from samfetch.session import Session
 from samfetch.crypto import Decryptor
 import httpx
 import xmltodict
-import json
 
 bp = Blueprint(name = "Routes")
 
@@ -112,7 +112,7 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
     await client.aclose()
     # Read the request.
     if binary_info.status_code == 200:
-        kies = KiesData(binary_info.text)
+        kies = KiesData.from_xml(binary_info.text)
         # Return error when binary couldn't be found.
         if kies.status_code != 200:
             raise SanicException(
@@ -129,6 +129,7 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             "path": kies.body["MODEL_PATH"],
             "version": kies.body["CURRENT_OS_VERSION"].replace("(", " ("),
             "encrypt_version": ENCRYPT_VERSION,
+            "last_modified": int(kies.body["LAST_MODIFIED"]),
             # Convert bytes to GB, so it will be more readable for an end-user.
             "size_readable": "{:.2f} GB".format(float(kies.body["BINARY_BYTE_SIZE"]) / 1024 / 1024 / 1024),
             # Generate decrypted key for decrypting the file after downloading.
@@ -136,7 +137,7 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             # we are converting it to a single HEX value.
             "decrypt_key": \
                 session.getv2key(firmware, model, region).hex() if ENCRYPT_VERSION == 2 else \
-                session.getv4key(kies.body["LATEST_FW_VERSION"], kies.body["LOGIC_VALUE_FACTORY"]).hex(),
+                session.getv4key(kies.body.get("LATEST_FW_VERSION", kies.body["ADD_LATEST_FW_VERSION"]), kies.body["LOGIC_VALUE_FACTORY"]).hex(),
             # A URL of samsungmobile that includes release changelogs.
             # Not available for every device.
             "firmware_changelog_url": kies.body["DESCRIPTION"],
@@ -149,27 +150,32 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
     )
 
 
-# /download/<decrypt_key:str>/<path:str>/<filename:str>
+# /download/<path:path>/<filename:str>
 #
 # Downloads the firmware and decrypts the file during download automatically. 
 # Decrypting can be skipped by providing "0" as decrypt_key.
-@bp.get("/download/<decrypt_key:str>/<path:str>/<filename:str>")
-async def download_binary(request : Request, decrypt_key: str, path: str, filename: str):
+@bp.get(r"/download/<path:path>/<filename:str>")
+async def download_binary(request : Request, path: str, filename: str):
     """
-    Downloads the firmware and decrypts the file while downloading. 
-    Decrypting can be skipped by providing "0" as decrypt_key.
+    Downloads the firmware and decrypts the file while downloading.
     """
+    decrypt_key = request.get_args().get("decrypt")
     # Create new session.
     client = httpx.AsyncClient()
     nonce = await client.send(KiesRequest.get_nonce())
     session = Session.from_response(nonce)
     # Make the request.
     download_info = await client.send(
-        KiesRequest.get_download(path = "/" + KiesUtils.join_path(path, filename), session = session)
+        KiesRequest.get_download(
+            path = "/" + KiesUtils.join_path(path, filename), 
+            session = session
+        )
     )
+    # Refresh session.
+    session.refresh_session(download_info)
     # Read the request.
     if download_info.status_code == 200:
-        kies = KiesData(download_info.text)
+        kies = KiesData.from_xml(download_info.text)
         # Return error when binary couldn't be found.
         if kies.status_code != 200:
             await client.aclose()
@@ -203,7 +209,7 @@ async def download_binary(request : Request, decrypt_key: str, path: str, filena
                 # Raise HTTPException when status is not success.
                 await client.aclose()
                 raise SanicException(
-                    f"Kies returned {kies.status_code}. Maybe parameters are invalid?", 
+                    f"Kies returned {download_file.status_code}. Maybe parameters are invalid?", 
                     download_file.status_code
                 )
             # Get the total size of binary.
@@ -214,7 +220,7 @@ async def download_binary(request : Request, decrypt_key: str, path: str, filena
                 # If an decrpytion key has provided, enable decryption,
                 # otherwise just download the encryted archive.
                 download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE) \
-                if decrypt_key == "0" else \
+                if decrypt_key == None else \
                 Decryptor(iterator = download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE), key = bytes.fromhex(decrypt_key)),
                 headers = { 
                     "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", ""),
@@ -243,6 +249,7 @@ async def direct_download(request : Request, region: str, model: str):
     It is useful for end-users who don't want to integrate the API in a client app.
     """
     version = await get_firmware_list(request, region, model)
-    binary = await get_binary_details(region, model, version["latest"])
-    binary_data = json.loads(binary.body)
-    return await download_binary(binary_data["filename"], binary_data["path"], binary_data["decrypt_key"], request)
+    version_data = loads(version.body)
+    binary = await get_binary_details(request, region, model, version_data["latest"])
+    binary_data = loads(binary.body)
+    return redirect(f'/download{binary_data["path"]}{binary_data["filename"]}?decrypt={binary_data["decrypt_key"]}')
