@@ -202,7 +202,7 @@ class KiesUtils:
         paths = []
         for p in args:
             if p:
-                paths.append(p.strip().replace("/", "").replace("\\", ""))
+                paths.append(p.strip().replace("/", " ").replace("\\", " ").strip().replace(" ", "/"))
         return "/".join(paths)
 
     # Creates new range string.

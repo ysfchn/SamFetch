@@ -10,6 +10,7 @@ from samfetch.session import Session
 from samfetch.crypto import Decryptor
 import httpx
 import xmltodict
+import json
 
 bp = Blueprint(name = "Routes")
 
@@ -79,7 +80,7 @@ async def get_firmware_list(request : Request, region : str, model : str):
         )
 
 
-# /binary/<region:str>/<model:str>/<firmware:str>
+# /binary/<region:str>/<model:str>/<firmware:path>
 #
 # Gets the binary details such as filename and decrypt key.
 #
@@ -92,7 +93,7 @@ async def get_firmware_list(request : Request, region : str, model : str):
 #   "encrypt_version": 4,
 #   "decrypt_key": "0727c304eea8a4d14835a4e6b02c0ce3"
 # }
-@bp.get("/binary/<region:str>/<model:str>/<firmware:str>")
+@bp.get("/binary/<region:str>/<model:str>/<firmware:path>")
 async def get_binary_details(request : Request, region: str, model: str, firmware: str):
     """
     Gets the binary details such as filename and decrypt key.\n
@@ -121,7 +122,7 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
         # If file extension ends with .enc4 that means it is using version 4 encryption, otherwise 2 (.enc2).
         ENCRYPT_VERSION = 4 if str(kies.body["BINARY_NAME"]).endswith("4") else 2
         # Get binary details
-        return {
+        return json({
             "display_name": kies.body["DEVICE_MODEL_DISPLAYNAME"],
             "size": int(kies.body["BINARY_BYTE_SIZE"]),
             "filename": kies.body["BINARY_NAME"],
@@ -140,7 +141,7 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             # Not available for every device.
             "firmware_changelog_url": kies.body["DESCRIPTION"],
             "platform": kies.body["DEVICE_PLATFORM"]
-        }
+        })
     # Raise exception when status is not 200.
     raise SanicException(
         "Firmware couldn't be found.", 
@@ -243,4 +244,5 @@ async def direct_download(request : Request, region: str, model: str):
     """
     version = await get_firmware_list(request, region, model)
     binary = await get_binary_details(region, model, version["latest"])
-    return await download_binary(binary["filename"], binary["path"], binary["decrypt_key"], request)
+    binary_data = json.loads(binary.body)
+    return await download_binary(binary_data["filename"], binary_data["path"], binary_data["decrypt_key"], request)
