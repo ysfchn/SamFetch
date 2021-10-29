@@ -3,6 +3,7 @@ from sanic import Sanic, Request, HTTPResponse
 from sanic.exceptions import SanicException
 from sanic.response import redirect, text, empty
 from httpx import HTTPError
+from web import bp
 
 
 app = Sanic("SamFetch")
@@ -94,3 +95,6 @@ async def home(request : Request):
 @app.get("/github")
 async def github(request : Request):
     return redirect("https://github.com/ysfchn/SamFetch")
+
+# Register blueprint.
+app.blueprint(bp)
