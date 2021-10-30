@@ -9,7 +9,7 @@ from web import bp
 app = Sanic("SamFetch")
 app.config.SAMFETCH_HIDE_TEXT = os.environ.get("SAMFETCH_HIDE_TEXT", None) or 0
 app.config.SAMFETCH_ALLOW_ORIGIN = os.environ.get("SAMFETCH_ALLOW_ORIGIN", None) or "*"
-app.config.SAMFETCH_CHUNK_SIZE = os.environ.get("SAMFETCH_CHUNK_SIZE", None) or 10485760
+app.config.SAMFETCH_CHUNK_SIZE = os.environ.get("SAMFETCH_CHUNK_SIZE", None) or 1485760
 app.config.FALLBACK_ERROR_FORMAT = "json"
 
 

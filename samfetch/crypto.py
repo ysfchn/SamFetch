@@ -4,9 +4,9 @@ __all__ = [
 ]
 
 import base64
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 from Crypto.Cipher import AES
-import httpx
+from sanic.response import StreamingHTTPResponse
 
 
 class Decryptor:
@@ -64,6 +64,28 @@ class Decryptor:
         # Shift to the next chunk and keep the previous one.
         await self.move()
         return returned
+
+
+def make_decryptor(iterator : AsyncIterator, key : Optional[bytes] = None):
+    # Don't decrypt firmware.
+    if key == None:
+        async def _downloader(response : StreamingHTTPResponse):
+            try:
+                while True:
+                    await response.write(await iterator.__anext__())
+            except StopAsyncIteration:
+                await response.eof()
+        return _downloader
+    # Enable decrypting.
+    else:
+        async def _downloader(response : StreamingHTTPResponse):
+            dec = Decryptor(iterator, key)
+            try:
+                while True:
+                    await response.write(await iterator.__anext__())
+            except StopAsyncIteration:
+                await response.eof()
+        return _downloader
 
 
 # Source:

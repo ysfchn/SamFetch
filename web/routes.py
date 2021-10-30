@@ -8,7 +8,7 @@ from sanic.response import json, redirect, stream
 from samfetch.csc import CSC
 from samfetch.kies import KiesData, KiesRequest, KiesUtils
 from samfetch.session import Session
-from samfetch.crypto import Decryptor
+from samfetch.crypto import Decryptor, make_decryptor
 import httpx
 import xmltodict
 
@@ -160,6 +160,7 @@ async def download_binary(request : Request, path: str, filename: str):
     Downloads the firmware and decrypts the file while downloading.
     """
     decrypt_key = request.get_args().get("decrypt")
+    DECRYPT_ENABLED : bool = decrypt_key != None
     # Create new session.
     client = httpx.AsyncClient()
     nonce = await client.send(KiesRequest.get_nonce())
@@ -219,14 +220,16 @@ async def download_binary(request : Request, path: str, filename: str):
             return stream(
                 # If an decrpytion key has provided, enable decryption,
                 # otherwise just download the encryted archive.
-                download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE) \
-                if decrypt_key == None else \
-                Decryptor(iterator = download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE), key = bytes.fromhex(decrypt_key)),
+                make_decryptor(
+                    iterator = download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE),
+                    key = None if not DECRYPT_ENABLED else bytes.fromhex(decrypt_key)
+                ),
                 headers = { 
-                    "Content-Disposition": "attachment;filename=" + filename.replace(".enc4", "").replace(".enc2", ""),
+                    "Content-Disposition": 'attachment; filename="' + \
+                        (filename if not DECRYPT_ENABLED else filename.replace(".enc4", "").replace(".enc2", "")) + '"',
                     "Content-Length": str(CONTENT_LENGTH),
                     "Accept-Ranges": "bytes",
-                    "Content-Range": RANGE_HEADER.replace("=", "")
+                    "Content-Range": RANGE_HEADER.replace("=", " ") + "/*"
                 },
                 content_type = "application/zip",
                 status = 200 if not START_RANGE else 206

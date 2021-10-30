@@ -150,10 +150,12 @@ class KiesRequest:
 
     @staticmethod
     def get_download(path : str, session : Session) -> httpx.Request:
+        # Extract firmware from path.
+        filename = path.split("/")[-1]
         return httpx.Request(
             "POST",
             KiesConstants.BINARY_FILE_URL,
-            content = KiesConstants.BINARY_FILE(path, session.logic_check(path.split(".")[0][-16:])),
+            content = KiesConstants.BINARY_FILE(filename, session.logic_check(filename.split(".")[0][-16:])),
             headers = KiesConstants.HEADERS(session.encrypted_nonce, session.auth),
             cookies = KiesConstants.COOKIES(session.session_id)
         )
@@ -166,7 +168,6 @@ class KiesRequest:
         return httpx.Request(
             "GET",
             KiesConstants.BINARY_DOWNLOAD_URL + "?file=" + path,
-            # params = f"file={path}",
             headers = headers,
             cookies = KiesConstants.COOKIES(session.session_id)
         )
