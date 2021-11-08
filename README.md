@@ -34,8 +34,8 @@ If you have a Heroku account already, you can click the "Deploy" button below an
 | `/csc`   | Lists all available CSC. Note that the list may be incomplete. | |
 | `/list/:region/:model` | Lists all firmware versions for a specific device and region. Region examples can be found on /csc endpoint. Note that some firmwares may be only available to specific regions. | |
 | `/binary/:region/:model/:firmware` | Gets details for a firmware such as download size, file name and decryption key. You can get firmware from /list endpoint. | |
-| `/download/:path/:firmware` | Downloads a firmware. You can get decrypt key, path and file from /binary endpoint. | Query parameters are available for this endpoint:<br><br>`decrypt` - Takes an decrypt key, so SamFetch can decrypt the firmware while sending it to you.<br><br>`size` - Set it to `1` to get file size when downloading  |
-
+| `/download/:path/:firmware` | Downloads a firmware. You can get decrypt key, path and file from /binary endpoint. | Query parameters are available for this endpoint:<br><br>`decrypt` - Takes an decrypt key, so SamFetch can decrypt the firmware while sending it to you. If not provided, SamFetch will download the encrypted file and you will need to decrypt manually.<br>`filename` - Overwrites the filename that shows up in the download client, defaults to Samsung's own firmware name. |
+| `/direct/:region/:model` | Executes all required endpoints and directly starts dowloading the latest firmware with one call. It is useful for end-users who don't want to integrate the API in a client app. |
 
 ### Downloading firmwares
 
