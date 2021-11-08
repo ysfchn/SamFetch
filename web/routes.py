@@ -1,14 +1,15 @@
 __all__ = ["bp"]
 
+from typing import Optional
 from sanic import Blueprint
 from sanic.exceptions import SanicException
 from sanic.request import Request
 from json import loads
-from sanic.response import json, redirect, stream
+from sanic.response import StreamingHTTPResponse, json, redirect, stream
 from samfetch.csc import CSC
-from samfetch.kies import KiesData, KiesRequest, KiesUtils
+from samfetch.kies import KiesData, KiesFirmwareList, KiesRequest, KiesUtils
 from samfetch.session import Session
-from samfetch.crypto import Decryptor, make_decryptor
+from samfetch.crypto import get_decryptor
 import httpx
 import xmltodict
 
@@ -55,29 +56,21 @@ async def get_firmware_list(request : Request, region : str, model : str):
             response.status_code
         )
     # Parse XML
-    firmwares = xmltodict.parse(response.text, dict_constructor=dict)
+    firmwares = KiesFirmwareList.from_xml(response.text)
     # Check if model is correct by checking the "versioninfo" key.
-    if "versioninfo" in firmwares:
-        # Parse latest firmware version.
-        versions = firmwares["versioninfo"]["firmware"]["version"]
-        # Check if value is None.
-        if (not versions.get("latest")) or (isinstance(versions["latest"], dict) and "#text" not in versions["latest"]):
-            raise SanicException(
-                "Looks like SamFetch couldn't find firmwares, maybe some or all of parameters are invalid?", 404
-            )
+    if firmwares.exists:
         # Return the firmware data.
         return json({
-            # The are cases that "latest" key may return a dictionary or just a string in different regions and models.
-            # If the "latest" field is dictionary, get the inner text, otherwise get its value directly.
-            "latest": KiesUtils.parse_firmware(versions["latest"] if isinstance(versions["latest"], str) else versions["latest"]["#text"]),
-            # Some devices may contain alternate/older versions too, so include them with the response.
-            "alternate": [KiesUtils.parse_firmware(x["#text"]) for x in versions["upgrade"]["value"] or []]
+            "latest": firmwares.latest,
+            "alternate": firmwares.alternate or []
         })
-    else:
-        # Raise exception when device couldn't be found.
-        raise SanicException(
-            "Looks like SamFetch couldn't find firmwares, maybe some or all of parameters are invalid?", 404
-        )
+    # Raise exception when device couldn't be found.
+    raise SanicException(
+        "Looks like SamFetch couldn't find firmwares, maybe some or all of parameters are invalid?" if firmwares._versions == None else \
+        "Looks like we got some firmware information, however SamFetch can't parse it due to it is represented in unknown format. " + \
+        "It is known that both new and old devices doesn't return same data, so make sure you reported that on GitHub (https://github.com/ysfchn/SamFetch)",
+        404
+    )
 
 
 # /binary/<region:str>/<model:str>/<firmware:path>
@@ -119,28 +112,35 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
                 "Firmware couldn't be found.", 
                 404
             )
+        # Return error if binary is not downloadable.
+        # https://github.com/nlscc/samloader/issues/54
+        if kies.body.get("BINARY_NAME") == None:
+            raise SanicException(
+                "Both firmware and device exists, however, looks like the firmware is not downloadable anymore.",
+                404
+            )
         # If file extension ends with .enc4 that means it is using version 4 encryption, otherwise 2 (.enc2).
         ENCRYPT_VERSION = 4 if str(kies.body["BINARY_NAME"]).endswith("4") else 2
-        # Get binary details
+        # Get binary details.
         return json({
             "display_name": kies.body["DEVICE_MODEL_DISPLAYNAME"],
             "size": int(kies.body["BINARY_BYTE_SIZE"]),
+            # Convert bytes to GB, so it will be more readable for an end-user.
+            "size_readable": "{:.2f} GB".format(float(kies.body["BINARY_BYTE_SIZE"]) / 1024 / 1024 / 1024),
             "filename": kies.body["BINARY_NAME"],
             "path": kies.body["MODEL_PATH"],
             "version": kies.body["CURRENT_OS_VERSION"].replace("(", " ("),
             "encrypt_version": ENCRYPT_VERSION,
             "last_modified": int(kies.body["LAST_MODIFIED"]),
-            # Convert bytes to GB, so it will be more readable for an end-user.
-            "size_readable": "{:.2f} GB".format(float(kies.body["BINARY_BYTE_SIZE"]) / 1024 / 1024 / 1024),
             # Generate decrypted key for decrypting the file after downloading.
             # Decrypt key gives a list of bytes, but as it is not possible to send as query parameter, 
             # we are converting it to a single HEX value.
             "decrypt_key": \
                 session.getv2key(firmware, model, region).hex() if ENCRYPT_VERSION == 2 else \
-                session.getv4key(kies.body.get("LATEST_FW_VERSION", kies.body["ADD_LATEST_FW_VERSION"]), kies.body["LOGIC_VALUE_FACTORY"]).hex(),
+                session.getv4key(kies.body.get_first("LATEST_FW_VERSION", "ADD_LATEST_FW_VERSION"), kies.body["LOGIC_VALUE_FACTORY"]).hex(),
             # A URL of samsungmobile that includes release changelogs.
             # Not available for every device.
-            "firmware_changelog_url": kies.body["DESCRIPTION"],
+            "firmware_changelog_url": kies.body.get_first("DESCRIPTION", "ADD_DESCRIPTION"),
             "platform": kies.body["DEVICE_PLATFORM"]
         })
     # Raise exception when status is not 200.
@@ -154,13 +154,15 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
 #
 # Downloads the firmware and decrypts the file during download automatically. 
 # Decrypting can be skipped by providing "0" as decrypt_key.
-@bp.get(r"/download/<path:path>/<filename:str>")
+@bp.get("/download/<path:path>/<filename:str>")
 async def download_binary(request : Request, path: str, filename: str):
     """
     Downloads the firmware and decrypts the file while downloading.
     """
-    decrypt_key = request.get_args().get("decrypt")
+    args = request.get_args()
+    decrypt_key = args.get("decrypt", None)
     DECRYPT_ENABLED : bool = decrypt_key != None
+    CUSTOM_FILENAME : Optional[str] = None if "filename" not in args else str(args.get("filename")).removesuffix(".zip") + ".zip"
     # Create new session.
     client = httpx.AsyncClient()
     nonce = await client.send(KiesRequest.get_nonce())
@@ -168,7 +170,7 @@ async def download_binary(request : Request, path: str, filename: str):
     # Make the request.
     download_info = await client.send(
         KiesRequest.get_download(
-            path = "/" + KiesUtils.join_path(path, filename), 
+            path = KiesUtils.join_path(path, filename), 
             session = session
         )
     )
@@ -187,21 +189,17 @@ async def download_binary(request : Request, path: str, filename: str):
         # Else, make another request to get the binary.
         else:
             # Check and parse the range header.
-            START_RANGE, END_RANGE = (0, 0) if "Range" not in request.headers else KiesUtils.parse_range_header(request.headers["Range"])
-            RANGE_HEADER = KiesUtils.make_range_header(START_RANGE, END_RANGE)
+            START_RANGE, END_RANGE = KiesUtils.parse_range_header(request.headers.get("Range", "bytes=0-"))
             # Check if range is invalid.
-            if START_RANGE == -1 or END_RANGE == -1:
+            if (START_RANGE == -1) or (END_RANGE == -1) or (DECRYPT_ENABLED and (END_RANGE != 0)):
                 await client.aclose()
-                raise SanicException(
-                    "'Range' header is invalid. If you didn't meant input a 'Range' header, remove it from request.",
-                    416
-                )
+                raise SanicException(416)
             # Another request for streaming the firmware.
             download_file = await client.send(
                 KiesRequest.start_download(
-                    path = "/" + KiesUtils.join_path(path, filename), 
-                    session = session, 
-                    custom_range = None if "Range" not in request.headers else RANGE_HEADER
+                    path = KiesUtils.join_path(path, filename), 
+                    session = session,
+                    custom_range = request.headers.get("Range", None)
                 ),
                 stream = True
             )
@@ -213,26 +211,34 @@ async def download_binary(request : Request, path: str, filename: str):
                     f"Kies returned {download_file.status_code}. Maybe parameters are invalid?", 
                     download_file.status_code
                 )
-            # Get the total size of binary.
-            CONTENT_LENGTH = int(download_file.headers["Content-Length"])
+            # Create headers.
+            headers = { 
+                "Content-Disposition": 'attachment; filename="' + \
+                    (CUSTOM_FILENAME if CUSTOM_FILENAME else filename if not DECRYPT_ENABLED else filename.replace(".enc4", "").replace(".enc2", "")) + '"',
+                # Get the total size of binary.
+                "Content-Length": download_file.headers["Content-Length"],
+                "Accept-Ranges": "bytes",
+                "Connection": "keep-alive"
+            }
+            if "Content-Range" in download_file.headers:
+                headers["Content-Range"] = download_file.headers["Content-Range"]
+            # If decryption is enabled, remove Content-Length.
+            # Because when we decrypt the firmware, it becomes slightly bigger or smaller
+            # so this causes exceptions as Content-Length is not same as sent file size.
+            if DECRYPT_ENABLED:
+                del headers["Content-Length"]
             # Decrypt bytes while downloading the file.
             # So this way, we can directly serve the bytes to the client without downloading to the disk.
             return stream(
                 # If an decrpytion key has provided, enable decryption,
                 # otherwise just download the encryted archive.
-                make_decryptor(
+                get_decryptor(
                     iterator = download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE),
                     key = None if not DECRYPT_ENABLED else bytes.fromhex(decrypt_key)
                 ),
-                headers = { 
-                    "Content-Disposition": 'attachment; filename="' + \
-                        (filename if not DECRYPT_ENABLED else filename.replace(".enc4", "").replace(".enc2", "")) + '"',
-                    "Content-Length": str(CONTENT_LENGTH),
-                    "Accept-Ranges": "bytes",
-                    "Content-Range": RANGE_HEADER.replace("=", " ") + "/*"
-                },
-                content_type = "application/zip",
-                status = 200 if not START_RANGE else 206
+                headers = headers,
+                content_type = "application/zip" if DECRYPT_ENABLED else "application/octet-stream",
+                status = download_file.status_code
             )
     # Raise exception when status is not 200.
     raise SanicException(

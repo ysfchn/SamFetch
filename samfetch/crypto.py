@@ -1,91 +1,48 @@
 __all__ = [
-    "Decryptor",
+    "get_decryptor",
     "Crypto"
 ]
 
 import base64
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Generator, Optional, Tuple
 from Crypto.Cipher import AES
 from sanic.response import StreamingHTTPResponse
 
 
-class Decryptor:
-    """
-    A custom iterator to decrypt the bytes without writing the whole file to the disk 
-    for downloading firmwares.
-    """
-
-    def __init__(self, iterator : AsyncIterator, key : bytes):
-        self.iterator : AsyncIterator = iterator
-        # We need to unpad (basically, do extra operation) the last chunk,
-        # so we need to learn when will the iterator end. As 
-        # Because of that, we hold next chunks and return the previous chunk to user.
-        self.chunks = [None, None]
-        # [ X, Y ]
-        # X - The future chunk
-        # Y - Will be sent to user (always comes from 1 step behind)
-        self.cipher = AES.new(key, AES.MODE_ECB)
-
-    async def __aiter__(self):
-        return self
-
-    async def move(self):
-        chunk = await self.iterator.__anext__()
-        self.chunks = [chunk, self.chunks[0]]
-
-    @property
-    def is_end(self) -> bool:
-        return self.chunks[0] == None 
-
-    @property
-    def is_start(self) -> bool:
-        return self.chunks[1] == None
-
-    @property
-    def is_end_exceed(self) -> bool:
-        return self.chunks[0] == None and self.chunks[1] == None
-
-    async def __anext__(self):
-        # Get the current chunk.
-        current = self.chunks[1]
-        returned = None
-        # Check if ending point exceed.
-        if self.is_end_exceed:
-            raise StopAsyncIteration
-        # Check if the chunk is starting point.
-        if self.is_start:
-            self.chunks = [await self.iterator.__anext__(), None]
-            returned = bytes(0)
-        # Check if the chunk is ending point.
-        elif self.is_end:
-            returned = Crypto.unpad(self.cipher.decrypt(current)) + bytes([0] * 10)
+# has_next() function
+# https://stackoverflow.com/a/67428657
+# Licensed with CC BY-SA 4.0
+async def has_next(it) -> Generator[Tuple[bool, Any], None, None]:
+    first = True
+    async for e in it:
+        if not first:
+            yield True, prev
         else:
-            returned = self.cipher.decrypt(current)
-        # Shift to the next chunk and keep the previous one.
-        await self.move()
-        return returned
+            first = False
+        prev = e
+    if not first:
+        yield False, prev
 
 
-def make_decryptor(iterator : AsyncIterator, key : Optional[bytes] = None):
-    # Don't decrypt firmware.
-    if key == None:
-        async def _downloader(response : StreamingHTTPResponse):
-            try:
-                while True:
-                    await response.write(await iterator.__anext__())
-            except StopAsyncIteration:
-                await response.eof()
+def get_decryptor(iterator : AsyncIterator, key : Optional[bytes] = None):
+    # DECRYPT WITH KEY
+    async def _downloader(response : StreamingHTTPResponse):
+        cipher = AES.new(key, AES.MODE_ECB)
+        async for continues, chunk in has_next(iterator):
+            # Decrypt chunk
+            data = cipher.decrypt(chunk)
+            if continues:
+                await response.write(data)
+            else:
+                await response.write(Crypto.unpad(data)) # + bytes([0] * 10))
+    # NOT DECRYPT
+    async def _plain_downloader(response : StreamingHTTPResponse):
+        async for i in iterator:
+            await response.write(i)
+    if key:
         return _downloader
-    # Enable decrypting.
     else:
-        async def _downloader(response : StreamingHTTPResponse):
-            dec = Decryptor(iterator, key)
-            try:
-                while True:
-                    await response.write(await iterator.__anext__())
-            except StopAsyncIteration:
-                await response.eof()
-        return _downloader
+        return _plain_downloader
 
 
 # Source:

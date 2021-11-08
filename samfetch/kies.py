@@ -3,16 +3,63 @@ __all__ = [
     "KiesData",
     "KiesConstants",
     "KiesRequest",
-    "KiesUtils"
+    "KiesUtils",
+    "KiesFirmwareList"
 ]
 
 from collections import UserDict
-from typing import Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 import dicttoxml
 import xmltodict
 import re
 import httpx
 from samfetch.session import Session
+
+
+class KiesFirmwareList:
+    """
+    Parses firmware list.
+    """
+    def __init__(self, data : Dict) -> None:
+        self._data = data
+        self._versions = None if ("versioninfo" not in self._data) else self._data["versioninfo"]["firmware"]["version"]
+
+    @classmethod
+    def from_xml(cls, xml : str) -> "KiesFirmwareList":
+        return cls(xmltodict.parse(xml, dict_constructor = dict))
+
+    @property
+    def exists(self) -> bool:
+        if (self._versions == None) or (self.latest == None):
+            return False
+        return True
+
+    @property
+    def latest(self) -> Optional[str]:
+        # The are cases that "latest" key may return a dictionary or just a string in different regions and models.
+        # If the "latest" field is dictionary, get the inner text, otherwise get its value directly.
+        if "latest" not in self._versions:
+            return None
+        elif isinstance(self._versions["latest"], str):
+            return KiesUtils.parse_firmware(self._versions["latest"])
+        elif isinstance(self._versions["latest"], dict):
+            return KiesUtils.parse_firmware(self._versions["latest"]["#text"])
+        return None
+
+    @property
+    def alternate(self) -> List[str]:
+        # Some devices may contain alternate/older versions too, so include them with the response.
+        upgrade = self._versions["upgrade"]["value"]
+        # No alternate versions.
+        if upgrade == None:
+            return []
+        # Multiple alternate versions.
+        elif isinstance(upgrade, list):
+            return [KiesUtils.parse_firmware(x["#text"]) for x in upgrade if x["#text"].count("/") > 1]
+        # Single alternate version.
+        elif isinstance(upgrade, dict):
+            return [KiesUtils.parse_firmware(upgrade["#text"])] if upgrade["#text"].count("/") > 1 else []
+        return []
 
 
 class KiesDict(UserDict):
@@ -22,7 +69,16 @@ class KiesDict(UserDict):
 
     def __getitem__(self, key) -> Any:
         d = super().__getitem__(key)
-        return d if type(d) is not dict else d.get("Data", d)
+        if type(d) is not dict:
+            return d
+        else:
+            return d.get("Data", d)
+
+    def get_first(self, *keys) -> Any:
+        for key in keys:
+            d = self.get(key, None)
+            if d != None:
+                return d
 
 
 class KiesData:
@@ -192,21 +248,28 @@ class KiesUtils:
     # Returns two sized tuples, first one is start and second one is end. (-1 if invalid)
     @staticmethod
     def parse_range_header(header: str) -> Tuple[int, int]:
-        _match = re.findall(r"^bytes=(\d+)-(\d*)?$", header, flags = re.MULTILINE)
-        if len(_match) != 1:
+        # Remove "bytes=" prefix.
+        ran = header.strip().removeprefix("bytes=").split("-", maxsplit = 1)
+        # Get range.
+        if len(ran) != 2:
             return -1, -1
-        return int(_match[0][0]), int(_match[0][1] or "0")
-
-    # Joins strings together that includes slashes.
-    @staticmethod
-    def join_path(*args) -> str:
-        paths = []
-        for p in args:
-            if p:
-                paths.append(p.strip().replace("/", " ").replace("\\", " ").strip().replace(" ", "/"))
-        return "/".join(paths)
+        elif (ran[0] == "") and (ran[1] == ""):
+            return 0, 0
+        elif ran[0] == "":
+            return 0, ran[1]
+        else:
+            return ran[0], ran[1]
 
     # Creates new range string.
     @staticmethod
     def make_range_header(start : int, end : int) -> str:
         return f"bytes={start or 0}-{end or ''}"
+
+    # Joins strings together that includes slashes.
+    @staticmethod
+    def join_path(*args, prefix = "/") -> str:
+        paths = []
+        for p in args:
+            if p:
+                paths.append(p.strip().replace("/", " ").replace("\\", " ").strip().replace(" ", "/"))
+        return (prefix or "") + "/".join(paths)
