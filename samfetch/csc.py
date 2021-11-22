@@ -1,3 +1,7 @@
+__all__ = [
+    "CSC"
+]
+
 CSC = {
     "3IE": "Ireland (Three)",
     "ACG": "USA (Nextech / C-Spire",
