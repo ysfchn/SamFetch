@@ -24,7 +24,7 @@ async def has_next(it) -> Generator[Tuple[bool, Any], None, None]:
         yield False, prev
 
 
-def get_decryptor(iterator : AsyncIterator, key : Optional[bytes] = None):
+def get_decryptor(iterator : AsyncIterator, key : Optional[bytes] = None, client : Optional[Any] = None):
     # DECRYPT WITH KEY
     async def _downloader(response : StreamingHTTPResponse):
         cipher = AES.new(key, AES.MODE_ECB)
@@ -35,10 +35,14 @@ def get_decryptor(iterator : AsyncIterator, key : Optional[bytes] = None):
                 await response.write(data)
             else:
                 await response.write(Crypto.unpad(data)) # + bytes([0] * 10))
+        if client:
+            await client.aclose()
     # NOT DECRYPT
     async def _plain_downloader(response : StreamingHTTPResponse):
         async for i in iterator:
             await response.write(i)
+        if client:
+            await client.aclose()
     if key:
         return _downloader
     else:

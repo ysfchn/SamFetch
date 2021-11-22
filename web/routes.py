@@ -234,7 +234,8 @@ async def download_binary(request : Request, path: str, filename: str):
                 # otherwise just download the encryted archive.
                 get_decryptor(
                     iterator = download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE),
-                    key = None if not DECRYPT_ENABLED else bytes.fromhex(decrypt_key)
+                    key = None if not DECRYPT_ENABLED else bytes.fromhex(decrypt_key),
+                    client = client
                 ),
                 headers = headers,
                 content_type = "application/zip" if DECRYPT_ENABLED else "application/octet-stream",
