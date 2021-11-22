@@ -37,21 +37,23 @@ If you have a Heroku account already, you can click the "Deploy" button below an
 | `/download/:path/:firmware` | Downloads a firmware. You can get decrypt key, path and file from /binary endpoint. | Query parameters are available for this endpoint:<br><br>`decrypt` - Takes an decrypt key, so SamFetch can decrypt the firmware while sending it to you. If not provided, SamFetch will download the encrypted file and you will need to decrypt manually.<br>`filename` - Overwrites the filename that shows up in the download client, defaults to Samsung's own firmware name. |
 | `/direct/:region/:model` or `/:region/:model` | Executes all required endpoints and directly starts dowloading the latest firmware with one call. It is useful for end-users who don't want to integrate the API in a client app. |
 
-### Downloading firmwares
+#### Downloading firmwares
 
 Samsung gives firmwares as encrypted binaries. SamFetch gives an option to download firmware decrypted while downloading it or you can download it encrypted and decrypt manually yourself. When you get firmware details with `/binary`, SamFetch gives a `decrypt_key` (represented as hex string). Then you can give the key to `/download` endpoint by setting `decrypt` query parameter with your `decrypt_key`.
 
-### Partial downloads
+If you prefer to decrypt firmwares manually, sadly you can't do it with SamFetch (as it is an web application not a CLI), but you can use [Samloader](https://github.com/nlscc/samloader) which has a `decrypt` command.
 
-SamFetch can automatically decrypt firmware when you request a download. However, decryption makes the firmware size bigger or smaller a bit, and when firmware size doesn't equal with actual size, download clients aborts the downloads and gives errors. So **SamFetch won't return the firmware size when decrypting has enabled to fix this issue.**
+#### Partial downloads
 
-### Verifing the files
+When an encrypted file has decrypted, the file size becomes slightly different from the encrypted file. The thing is, SamFetch sends the firmware size, so your download client can show a progress bar and calculate ETA. However, when the decrypted size is not equal with actual size, download clients will stop the downloads. To fix failed downloads, **SamFetch won't send the firmware size when decrypting has enabled.**
+
+#### Verifing the files
 
 Samsung (Kies) servers only gives a CRC hash value which is for encrypted file, but as SamFetch can also decrypt the file while sending it to user, it is not possible to know the hash of the firmware. You can download encrypted the file and decrypt manually after checking the CRC. 
 
-### Decrypting manually
+### Updating your SamFetch instance
 
-SamFetch doesn't have a way to decrypt firmwares for now but you can use [Samloader](https://github.com/nlscc/samloader)'s own `decrypt` command.
+There are several ways to update your Heroku app when it is deployed from deploy button, however the easiest one is deleting your old deployed app and deploying it again from deploy button. If you want to keep the same URL, you can always rename your app in Heroku dashboard, renaming app also changes the app URL.
 
 ## Credits
 
