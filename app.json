@@ -3,13 +3,22 @@
     "description": "A Web API to download firmwares from Samsung servers without any restriction.",
     "website": "https://ysfchn.com",
     "repository": "https://github.com/ysfchn/SamFetch",
-    "logo": "https://ysfchn.com/img/undercontrol.png",
-    "keywords": [
-        "samfirm",
-        "samloader",
-        "samsung",
-        "firmware",
-        "heroku",
-        "fastapi"
-    ]
+    "keywords": [ "samsung", "firmware", "heroku", "sanic", "python", "python3" ],
+    "env": {
+        "SAMFETCH_HIDE_TEXT": {
+            "description": "Only 0 or 1. Set the value to 1 if you don't want the help text.",
+            "value": "0",
+            "required": false
+        },
+        "SAMFETCH_ALLOW_ORIGIN": {
+            "description": "Sets the \"Access-Control-Allow-Origin\" header value. Settings this to \"*\" (wildcard) allows all domains to access this SamFetch instance. Default is set to \"*\".",
+            "value": "*",
+            "required": false
+        },
+        "SAMFETCH_CHUNK_SIZE": {
+            "description": "Specifies how many bytes must read in a single iteration when downloading the firmware. Default is set to 1485760 (1 megabytes)",
+            "value": "1485760",
+            "required": false
+        }
+    }
 }

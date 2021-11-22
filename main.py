@@ -5,11 +5,20 @@ from sanic.response import redirect, text, empty
 from httpx import HTTPError, NetworkError
 from web import bp
 
+def get_env_int(name : str, default):
+    if name not in os.environ:
+        return default
+    _val = os.environ[name]
+    if _val.isnumeric():
+        return int(_val)
+    else:
+        return default
+
 
 app = Sanic("SamFetch")
-app.config.SAMFETCH_HIDE_TEXT = bool(os.environ.get("SAMFETCH_HIDE_TEXT", None) or None)
+app.config.SAMFETCH_HIDE_TEXT = bool(get_env_int("SAMFETCH_HIDE_TEXT", 0))
 app.config.SAMFETCH_ALLOW_ORIGIN = os.environ.get("SAMFETCH_ALLOW_ORIGIN", None) or "*"
-app.config.SAMFETCH_CHUNK_SIZE = int(os.environ.get("SAMFETCH_CHUNK_SIZE", None) or 1485760)
+app.config.SAMFETCH_CHUNK_SIZE = get_env_int("SAMFETCH_CHUNK_SIZE", 1485760)
 app.config.FALLBACK_ERROR_FORMAT = "json"
 
 
@@ -62,15 +71,15 @@ NOTICE = \
                                                         can get path and file from /binary endpoint.
 
         /direct/<REGION>/<MODEL>                        Fetches all endpoints and downloads the latest
-                                                        firmware file with decrypting.
+        /<REGION>/<MODEL>                               firmware file with decrypting.
 
         
         ## Global Configuration
 
         You can set environment variables to change configuration of your SamFetch instance.
 
-        SAMFETCH_HIDE_TEXT                              Set the value to 1 if you don't want this
-                                                        landing response.
+        SAMFETCH_HIDE_TEXT                              Only 0 or 1. Set the value to 1 if you don't 
+                                                        want this help text.
 
         SAMFETCH_ALLOW_ORIGIN                           Sets the "Access-Control-Allow-Origin" header
                                                         value. Settings this to "*" (wildcard) allows
@@ -104,7 +113,8 @@ async def http_error(request : Request, exception : HTTPError):
     else:
         raise SanicException(message = \
             "SamFetch couldn't connect to Kies servers. This is probably not related to you. " + \
-            "Make sure you reported that in the SamFetch repository by creating a new Issue in " + \
+            "Please try again if you didn't. Make sure you reported that in the SamFetch repository " + \
+            "by creating a new Issue in " + \
             "https://git.io/JPAbu",
             status_code = 500
         )

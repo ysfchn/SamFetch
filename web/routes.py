@@ -193,7 +193,7 @@ async def download_binary(request : Request, path: str, filename: str):
             # Check if range is invalid.
             if (START_RANGE == -1) or (END_RANGE == -1) or (DECRYPT_ENABLED and (END_RANGE != 0)):
                 await client.aclose()
-                raise SanicException(416)
+                raise SanicException("Range header is invalid.", 416)
             # Another request for streaming the firmware.
             download_file = await client.send(
                 KiesRequest.start_download(
@@ -214,7 +214,7 @@ async def download_binary(request : Request, path: str, filename: str):
             # Create headers.
             headers = { 
                 "Content-Disposition": 'attachment; filename="' + \
-                    (CUSTOM_FILENAME if CUSTOM_FILENAME else filename if not DECRYPT_ENABLED else filename.replace(".enc4", "").replace(".enc2", "")) + '"',
+                    (CUSTOM_FILENAME or (filename if not DECRYPT_ENABLED else filename.replace(".enc4", "").replace(".enc2", ""))) + '"',
                 # Get the total size of binary.
                 "Content-Length": download_file.headers["Content-Length"],
                 "Accept-Ranges": "bytes",
@@ -262,3 +262,8 @@ async def direct_download(request : Request, region: str, model: str):
     binary = await get_binary_details(request, region, model, version_data["latest"])
     binary_data = loads(binary.body)
     return redirect(f'/download{binary_data["path"]}{binary_data["filename"]}?decrypt={binary_data["decrypt_key"]}')
+
+
+@bp.get("/<region:str>/<model:str>")
+async def direct_download_legacy(request : Request, region: str, model: str):
+    return redirect(f'/direct/{region}/{model}')

@@ -253,12 +253,7 @@ class KiesUtils:
         # Get range.
         if len(ran) != 2:
             return -1, -1
-        elif (ran[0] == "") and (ran[1] == ""):
-            return 0, 0
-        elif ran[0] == "":
-            return 0, ran[1]
-        else:
-            return ran[0], ran[1]
+        return int(ran[0] or 0), int(ran[1] or 0)
 
     # Creates new range string.
     @staticmethod
