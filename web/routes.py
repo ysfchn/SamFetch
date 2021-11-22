@@ -5,13 +5,12 @@ from sanic import Blueprint
 from sanic.exceptions import SanicException
 from sanic.request import Request
 from json import loads
-from sanic.response import StreamingHTTPResponse, json, redirect, stream
+from sanic.response import json, redirect, stream
 from samfetch.csc import CSC
 from samfetch.kies import KiesData, KiesFirmwareList, KiesRequest, KiesUtils
 from samfetch.session import Session
 from samfetch.crypto import get_decryptor
 import httpx
-import xmltodict
 
 bp = Blueprint(name = "Routes")
 

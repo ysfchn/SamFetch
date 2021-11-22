@@ -255,11 +255,6 @@ class KiesUtils:
             return -1, -1
         return int(ran[0] or 0), int(ran[1] or 0)
 
-    # Creates new range string.
-    @staticmethod
-    def make_range_header(start : int, end : int) -> str:
-        return f"bytes={start or 0}-{end or ''}"
-
     # Joins strings together that includes slashes.
     @staticmethod
     def join_path(*args, prefix = "/") -> str:
