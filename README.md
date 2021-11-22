@@ -23,7 +23,7 @@ If you have a Heroku account already, you can click the "Deploy" button below an
 
 * It doesn't pre-download the firmware and it doesn't have any background jobs/queue for downloading and decrypting the firmware, so this means the firmware file will directly stream to your browser or your download client, while decrypting the chunks. 
 
-* SamFetch supports partial downloads _("Range" header)_ which means it supports pausing and resuming the download in your download client / browser's own downloader. [Note that partial downloads may cause issues, so see here](#partial-downloads).
+* SamFetch supports partial downloads _("Range" header)_ which means it supports pausing and resuming the download in your download client / browser's own downloader. [Note that partial downloads are not allowed when decrypting has enabled, see here.](#partial-downloads)
 
 * You can configure your SamFetch instance such as adding CORS headers and change chunk size with environment variables.
 
@@ -43,7 +43,7 @@ Samsung gives firmwares as encrypted binaries. SamFetch gives an option to downl
 
 ### Partial downloads
 
-SamFetch can automatically decrypt firmware when you request a download. However, decryption makes the firmware size bigger or smaller a bit and as SamFetch sends firmware size too. When firmware size doesn't equal with actual size, download clients aborts the downloads and gives errors. So **SamFetch won't return the firmware size when decrypting has enabled to fix this issue.**
+SamFetch can automatically decrypt firmware when you request a download. However, decryption makes the firmware size bigger or smaller a bit, and when firmware size doesn't equal with actual size, download clients aborts the downloads and gives errors. So **SamFetch won't return the firmware size when decrypting has enabled to fix this issue.**
 
 ### Verifing the files
 
