@@ -1,12 +1,12 @@
 __all__ = [
-    "get_decryptor",
+    "start_decryptor",
     "Crypto"
 ]
 
 import base64
 from typing import Any, AsyncIterator, Generator, Optional, Tuple
 from Crypto.Cipher import AES
-from sanic.response import StreamingHTTPResponse
+from sanic.response import BaseHTTPResponse
 
 
 # has_next() function
@@ -24,29 +24,26 @@ async def has_next(it) -> Generator[Tuple[bool, Any], None, None]:
         yield False, prev
 
 
-def get_decryptor(iterator : AsyncIterator, key : Optional[bytes] = None, client : Optional[Any] = None):
+async def start_decryptor(response : BaseHTTPResponse, iterator : AsyncIterator, key : Optional[bytes] = None, client : Optional[Any] = None):
     # DECRYPT WITH KEY
-    async def _downloader(response : StreamingHTTPResponse):
+    if key:
         cipher = AES.new(key, AES.MODE_ECB)
         async for continues, chunk in has_next(iterator):
             # Decrypt chunk
             data = cipher.decrypt(chunk)
             if continues:
-                await response.write(data)
+                await response.send(data)
             else:
-                await response.write(Crypto.unpad(data)) # + bytes([0] * 10))
+                await response.send(Crypto.unpad(data)) # + bytes([0] * 10))
         if client:
             await client.aclose()
-    # NOT DECRYPT
-    async def _plain_downloader(response : StreamingHTTPResponse):
-        async for i in iterator:
-            await response.write(i)
-        if client:
-            await client.aclose()
-    if key:
-        return _downloader
+        await response.eof()
     else:
-        return _plain_downloader
+        async for i in iterator:
+            await response.send(i)
+        if client:
+            await client.aclose()
+        await response.eof()
 
 
 # Source:

@@ -2,4 +2,4 @@ xmltodict
 dicttoxml
 pycryptodome
 httpx==0.20.0
-sanic==21.9.1
+sanic==21.12.1

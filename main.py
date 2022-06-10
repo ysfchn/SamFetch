@@ -1,9 +1,8 @@
 import os
 from sanic import Sanic, Request, HTTPResponse
-from sanic.exceptions import SanicException
 from sanic.response import redirect, text, empty
 from httpx import HTTPError, NetworkError
-from web import bp
+from web import bp, SamfetchError, make_error
 
 def get_env_int(name : str, default):
     if name not in os.environ:
@@ -14,16 +13,36 @@ def get_env_int(name : str, default):
     else:
         return default
 
+def get_env_bool(name : str, default : bool):
+    return bool(get_env_int(name, default))
+
+def build_endpoint_doc():
+    data = {}
+    for route in bp.routes:
+        doc = (route.handler.__doc__ or "").replace("    ", "").replace("\n", "")
+        data["/" + route.path] = [y + ("" if y.endswith(".") else ".") for y in doc.split(". ")]
+    data = dict(sorted(data.items(), key = lambda x: x[0]))
+    result = []
+    first = True
+    for k, v in data.items():
+        result.append(("  " if not first else "") + k.ljust(60) + v[0])
+        if first:
+            first = False
+        for i in v[1:]:
+            result.append((62 * " ") + i)
+        result.append("")
+    return "\n".join(result)
+
 
 app = Sanic("SamFetch")
-app.config.SAMFETCH_HIDE_TEXT = bool(get_env_int("SAMFETCH_HIDE_TEXT", 0))
+app.config.SAMFETCH_HIDE_TEXT = get_env_bool("SAMFETCH_HIDE_TEXT", False)
 app.config.SAMFETCH_ALLOW_ORIGIN = os.environ.get("SAMFETCH_ALLOW_ORIGIN", None) or "*"
 app.config.SAMFETCH_CHUNK_SIZE = get_env_int("SAMFETCH_CHUNK_SIZE", 1485760)
 app.config.FALLBACK_ERROR_FORMAT = "json"
 
 
 NOTICE = \
-"""
+f"""
           _____                 ______   _       _     
          / ____|               |  ____| | |     | |    
         | (___   __ _ _ __ ___ | |__ ___| |_ ___| |__  
@@ -48,31 +67,7 @@ NOTICE = \
         
         ## Endpoints
 
-        /csc                                            Lists all available CSC.
-                                                        Note that the list may be incomplete.
-
-        /list/<REGION>/<MODEL>                          Lists all firmware versions for a specific
-                                                        device and region. Region examples can be found
-                                                        on /csc endpoint. Note that some firmwares may
-                                                        be only available to specific regions.
-
-        /binary/<REGION>/<MODEL>/<FIRMWARE>             Gets details for a firmware such as download
-                                                        size, file name and decryption key. You can
-                                                        get firmware from /list endpoint.
-
-        /download/<PATH>/<FILE>?decrypt=<DECRYPT_KEY>   Downloads a firmware while decrypting it. You
-                                                        can get decrypt key, path and file from
-                                                        /binary endpoint.
-
-        /download/<PATH>/<FILE>                         Downloads a firmware. But it doesn't decrypt
-                                                        while downloading, so you need to decrypt
-                                                        yourself. Downloading without decrypting
-                                                        can speed up the download a bit. You
-                                                        can get path and file from /binary endpoint.
-
-        /direct/<REGION>/<MODEL>                        Fetches all endpoints and downloads the latest
-        /<REGION>/<MODEL>                               firmware file with decrypting.
-
+        (endpoints)
         
         ## Global Configuration
 
@@ -89,6 +84,8 @@ NOTICE = \
         SAMFETCH_CHUNK_SIZE                             Specifies how many bytes must read in
                                                         a single iteration when downloading the firmware.
                                                         Default is set to 1485760 (1 megabytes)
+
+        SAMFETCH_GITHUB_URL                             GitHub URL for 
 """
 
 
@@ -103,28 +100,17 @@ async def set_cors(request : Request, response : HTTPResponse):
 @app.exception(HTTPError)
 async def http_error(request : Request, exception : HTTPError):
     if isinstance(exception, NetworkError):
-        raise SanicException(message = \
-            "SamFetch has lost connection with Kies servers. If you are running SamFetch locally, make sure you " + \
-            "have an internet connection. If you are currently hosting SamFetch somewhere, you can also check " + \
-            "if something (such as firewall) blocking the connection. If you need help, create a new Issue in " + \
-            "https://git.io/JPAbu",
-            status_code = 500
-        )
+        raise make_error(SamfetchError.NETWORK_ERROR, 500)
     else:
-        raise SanicException(message = \
-            "SamFetch couldn't connect to Kies servers. This is probably not related to you. " + \
-            "Please try again if you didn't. Make sure you reported that in the SamFetch repository " + \
-            "by creating a new Issue in " + \
-            "https://git.io/JPAbu",
-            status_code = 500
-        )
+        raise make_error(SamfetchError.GENERIC_HTTP_ERROR, 500)
 
 
 @app.get("/")
 async def home(request : Request):
     return empty() if request.app.config.SAMFETCH_HIDE_TEXT else \
     text(
-        "\n".join(x.replace("        ", "  ", 1) for x in NOTICE.splitlines()) + "\n\n"
+        ("\n".join(x.replace("        ", "  ", 1) for x in NOTICE.splitlines()) + "\n\n").replace("(endpoints)",
+        build_endpoint_doc())
     )
 
 

@@ -37,6 +37,12 @@ If you have a Heroku account already, you can click the "Deploy" button below an
 | `/download/:path/:firmware` | Downloads a firmware. You can get decrypt key, path and file from /binary endpoint. | Query parameters are available for this endpoint:<br><br>`decrypt` - Takes an decrypt key, so SamFetch can decrypt the firmware while sending it to you. If not provided, SamFetch will download the encrypted file and you will need to decrypt manually.<br>`filename` - Overwrites the filename that shows up in the download client, defaults to Samsung's own firmware name. |
 | `/direct/:region/:model` or `/:region/:model` | Executes all required endpoints and directly starts dowloading the latest firmware with one call. It is useful for end-users who don't want to integrate the API in a client app. |
 
+## Running
+
+```
+sanic main.app
+```
+
 ## Notes
 
 #### Downloading firmwares

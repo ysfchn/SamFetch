@@ -115,6 +115,11 @@ class KiesConstants:
     # Get firmware information url
     GET_FIRMWARE_URL = "http://fota-cloud-dn.ospserver.net/firmware/{0}/{1}/version.xml"
 
+    # GET_TEST_FIRMWARE_URL = "http://fota-secure-dn.ospserver.net/firmware/{0}/{1}/nspx/{2}.bin"
+    #
+    # It is still unknown that how to download test firmwares, but several search results got me to find this URL.
+    # However, looks like it requires some type of authorization with query parameters instead of nonce.
+
     # Generate nonce url
     NONCE_URL = "https://neofussvr.sslcs.cdngc.net/NF_DownloadGenerateNonce.do"
 
@@ -241,8 +246,7 @@ class KiesUtils:
             if l[2] == "":
                 l[2] = l[0]
             return "/".join(l)
-        else:
-            return None
+        raise ValueError("Invalid firmware format.")
 
     # Parse range header.
     # Returns two sized tuples, first one is start and second one is end. (-1 if invalid)
@@ -263,3 +267,41 @@ class KiesUtils:
             if p:
                 paths.append(p.strip().replace("/", " ").replace("\\", " ").strip().replace(" ", "/"))
         return (prefix or "") + "/".join(paths)
+
+    # Gets basic information from a firmware string.
+    # Resources:
+    # - https://android.stackexchange.com/questions/183326/what-do-all-these-letters-numbers-in-early-samsung-rom-file-name-mean/183328#183328
+    # - https://forum.xda-developers.com/t/ref-samsung-firmware-naming-convention-and-explanation.1356325/
+    # - https://r1.community.samsung.com/t5/galaxy-s/how-to-read-build-versions/td-p/581424
+    @staticmethod
+    def read_firmware(firmware : str) -> Tuple[Optional[str], Optional[int], int, int, int]:
+        if firmware.count("/") == 3:
+            # Get last 6 character from PDA.
+            pda = firmware.split("/")[0][-6:]
+            result = [None, None, None, None, None]
+            # 0 - Bootloader
+            # 1 - Major version
+            # 2 - Year
+            # 3 - Month
+            # 4 - Minor version
+            # Make sure the bootloader column exists.
+            if (pda[0] in ["U", "S"]) and (pda[1].isnumeric()):
+                # Bootloader version (U = Upgrade, S = Security)
+                result[0] = pda[0:2]
+                # Major version iteration (A = 0, B = 1, ... Z = Public Beta)
+                result[1] = ord(pda[2]) - ord("A")
+                # Year (... R = 2018, S = 2019, T = 2020 ...)
+                result[2] = (ord(pda[3]) - ord("R")) + 2018
+                # Month (A = 01, B = 02, ... L = 12)
+                result[3] = ord(pda[4]) - ord("A")
+                # Minor version iteration (1 = 1, ... F = 16)
+                result[4] = int(pda[5], 16)
+            else:
+                # Year (... R = 2018, S = 2019, T = 2020 ...)
+                result[2] = (ord(pda[-3]) - ord("R")) + 2018
+                # Month (A = 01, B = 02, ... L = 12)
+                result[3] = ord(pda[-2]) - ord("A")
+                # Minor version iteration (1 = 1, ... F = 16)
+                result[4] = int(pda[-1], 16)
+            return result
+        raise ValueError("Invalid firmware format.")

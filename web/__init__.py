@@ -1,5 +1,8 @@
 __all__ = [
-    "bp"
+    "bp",
+    "SamfetchError",
+    "make_error"
 ]
 
+from web.exceptions import SamfetchError, make_error
 from web.routes import bp
