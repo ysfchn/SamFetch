@@ -14,7 +14,7 @@ import httpx
 bp = Blueprint(name = "Routes")
 
 
-@bp.get("/firmware/<region:str>/<model:str>")
+@bp.get("/firmware/<region:str>/<model:str>/list")
 async def get_firmware_list(request : Request, region : str, model : str):
     """
     List the available firmware versions of a specified model and region.
@@ -23,7 +23,6 @@ async def get_firmware_list(request : Request, region : str, model : str):
     response = await client.send(
         KiesRequest.list_firmware(region = region, model = model)
     )
-    # Close client.
     await client.aclose()
     # Raise exception when firmware list couldn't be fetched.
     if response.status_code != 200:
@@ -45,15 +44,15 @@ async def get_firmware_list(request : Request, region : str, model : str):
             "is_latest": True
         }]
         for i in firmwares.alternate:
-            ii = KiesUtils.read_firmware(firmwares.latest)
+            ii = KiesUtils.read_firmware(i)
             f.append({
                 "firmware": i,
                 "pda": {
                     "bootloader": ii[0],
                     "date": f"{ii[2]}.{ii[3]}",
-                    "major": ff[1],
-                    "minor": ff[4]
-                },
+                    "major": ii[1],
+                    "minor": ii[4]
+                }
             })
         return json(f)
     # Raise exception when device couldn't be found.
@@ -62,24 +61,48 @@ async def get_firmware_list(request : Request, region : str, model : str):
     raise make_error(SamfetchError.FIRMWARE_CANT_PARSE, 404)
 
 
+@bp.get("/firmware/<region:str>/<model:str>/latest")
+async def get_firmware_latest(request : Request, region : str, model : str):
+    """
+    Gets the latest firmware version for the device and redirects to its information.
+    If "download" query parameter has provided with any value, instead of giving firmware information, 
+    the download will start automatically with decryption enabled.
+    """
+    # Auto download args
+    args = request.get_args()
+    auto_download : bool = args.get("download", None) != None
+    # Create new session.
+    client = httpx.AsyncClient()
+    response = await client.send(
+        KiesRequest.list_firmware(region = region, model = model)
+    )
+    await client.aclose()
+    # Raise exception when firmware list couldn't be fetched.
+    if response.status_code != 200:
+        raise make_error(SamfetchError.DEVICE_NOT_FOUND, response.status_code)
+    # Parse XML
+    firmwares = KiesFirmwareList.from_xml(response.text)
+    # Check if model is correct by checking the "versioninfo" key.
+    if firmwares.exists:
+        return redirect(f"/firmware/{region}/{model}/{firmwares.latest}" + ("" if not auto_download else "?download=1"))
+    # Raise exception when device couldn't be found.
+    if firmwares._versions == None:
+        raise make_error(SamfetchError.FIRMWARE_LIST_EMPTY, 404)
+    raise make_error(SamfetchError.FIRMWARE_CANT_PARSE, 404)
+
+
 # Gets the binary details such as filename and decrypt key.
-#
-# {
-#   "display_name": "Galaxy Note5"
-#   "size": 2530817088,
-#   "size_readable": "2.36 GB",
-#   "filename": "SM-N920C_1_20190117104840_n2lqmc6w6w_fac.zip.enc4",
-#   "path": "/neofus/9/",
-#   "encrypt_version": 4,
-#   "decrypt_key": "0727c304eea8a4d14835a4e6b02c0ce3"
-# }
 @bp.get("/firmware/<region:str>/<model:str>/<firmware:path>")
 async def get_binary_details(request : Request, region: str, model: str, firmware: str):
     """
-    Gets the binary details such as filename and decrypt key. \n
-    `firmware` is the firmware code of the device that you got from `/list` endpoint. \n\n
-    `decrypt_key` is used for decrypting the file after downloading.
+    Gets the firmware details such as path, filename and decrypt key. 
+    Use these values to start downloading the firmware file.
+    If "download" query parameter has provided with any value, instead of giving firmware information, 
+    the download will start automatically with decryption enabled.
     """
+    # Auto download args
+    args = request.get_args()
+    auto_download : bool = args.get("download", None) != None
     # Create new session.
     client = httpx.AsyncClient()
     nonce = await client.send(KiesRequest.get_nonce())
@@ -88,7 +111,6 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
     binary_info = await client.send(
         KiesRequest.get_binary(region = region, model = model, firmware = firmware, session = session)
     )
-    # Close client.
     await client.aclose()
     # Read the request.
     if binary_info.status_code == 200:
@@ -102,6 +124,16 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             raise make_error(SamfetchError.FIRMWARE_LOST, 404)
         # If file extension ends with .enc4 that means it is using version 4 encryption, otherwise 2 (.enc2).
         ENCRYPT_VERSION = 4 if str(kies.body["BINARY_NAME"]).endswith("4") else 2
+        pda_info = KiesUtils.read_firmware(firmware)
+        # Generate decrypted key for decrypting the file after downloading.
+        # Decrypt key gives a list of bytes, but as it is not possible to send as query parameter, 
+        # we are converting it to a single HEX value.
+        decryption_key = \
+            session.getv2key(firmware, model, region).hex() if ENCRYPT_VERSION == 2 else \
+            session.getv4key(kies.body.get_first("LATEST_FW_VERSION", "ADD_LATEST_FW_VERSION"), kies.body["LOGIC_VALUE_FACTORY"]).hex()
+        # If auto downloading has enabled, redirect to downloading the firmware.
+        if auto_download:
+            return redirect(f'/download{kies.body["MODEL_PATH"]}{kies.body["BINARY_NAME"]}?decrypt={decryption_key}')
         # Get binary details.
         return json({
             "display_name": kies.body["DEVICE_MODEL_DISPLAYNAME"],
@@ -113,16 +145,19 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             "version": kies.body["CURRENT_OS_VERSION"].replace("(", " ("),
             "encrypt_version": ENCRYPT_VERSION,
             "last_modified": int(kies.body["LAST_MODIFIED"]),
-            # Generate decrypted key for decrypting the file after downloading.
-            # Decrypt key gives a list of bytes, but as it is not possible to send as query parameter, 
-            # we are converting it to a single HEX value.
-            "decrypt_key": \
-                session.getv2key(firmware, model, region).hex() if ENCRYPT_VERSION == 2 else \
-                session.getv4key(kies.body.get_first("LATEST_FW_VERSION", "ADD_LATEST_FW_VERSION"), kies.body["LOGIC_VALUE_FACTORY"]).hex(),
+            "decrypt_key": decryption_key,
             # A URL of samsungmobile that includes release changelogs.
             # Not available for every device.
             "firmware_changelog_url": kies.body.get_first("DESCRIPTION", "ADD_DESCRIPTION"),
-            "platform": kies.body["DEVICE_PLATFORM"]
+            "platform": kies.body["DEVICE_PLATFORM"],
+            "crc": kies.body["BINARY_CRC"],
+            # Get PDA information.
+            "pda": {
+                "bootloader": pda_info[0],
+                "date": f"{pda_info[2]}.{pda_info[3]}",
+                "major": pda_info[1],
+                "minor": pda_info[4]
+            }
         })
     # Raise exception when status is not 200.
     raise make_error(SamfetchError.KIES_SERVER_OUTER_ERROR, binary_info.status_code)
@@ -131,8 +166,9 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
 @bp.get("/download/<path:path>/<filename:str>")
 async def download_binary(request : Request, path: str, filename: str):
     """
-    Downloads the firmware and decrypts the file while downloading. 
-    Decrypting can be skipped by providing "0" as decrypt_key.
+    Downloads the firmware with given path and filename.
+    To enable decrypting, insert "decrypt" query parameter with decryption key. If this parameter is not provided,
+    the encrypted binary will be downloaded. Path, filename and decryption key can be obtained on `/firmware` endpoint.
     """
     args = request.get_args()
     decrypt_key = args.get("decrypt", None)
@@ -144,10 +180,7 @@ async def download_binary(request : Request, path: str, filename: str):
     session = Session.from_response(nonce)
     # Make the request.
     download_info = await client.send(
-        KiesRequest.get_download(
-            path = KiesUtils.join_path(path, filename), 
-            session = session
-        )
+        KiesRequest.get_download(path = KiesUtils.join_path(path, filename), session = session)
     )
     # Refresh session.
     session.refresh_session(download_info)
@@ -211,18 +244,3 @@ async def download_binary(request : Request, path: str, filename: str):
             )
     # Raise exception when status is not 200.
     raise make_error(SamfetchError.KIES_SERVER_OUTER_ERROR, download_info.status_code)
-
-
-# Executes all required endpoints and directly starts dowloading the latest firmware with one call.
-# It is useful for end-users who don't want to integrate the API in a client app.
-@bp.get("/direct/<region:str>/<model:str>")
-async def direct_download(request : Request, region: str, model: str):
-    """
-    Executes all required endpoints and directly starts dowloading the latest firmware with one call. \n
-    It is useful for end-users who don't want to integrate the API in a client app.
-    """
-    version = await get_firmware_list(request, region, model)
-    version_data = loads(version.body)
-    binary = await get_binary_details(request, region, model, version_data["latest"])
-    binary_data = loads(binary.body)
-    return redirect(f'/download{binary_data["path"]}{binary_data["filename"]}?decrypt={binary_data["decrypt_key"]}')

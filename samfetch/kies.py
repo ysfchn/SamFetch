@@ -13,6 +13,7 @@ import dicttoxml
 import xmltodict
 import re
 import httpx
+import string
 from samfetch.session import Session
 
 
@@ -295,14 +296,14 @@ class KiesUtils:
                 result[2] = (ord(pda[3]) - ord("R")) + 2018
                 # Month (A = 01, B = 02, ... L = 12)
                 result[3] = ord(pda[4]) - ord("A")
-                # Minor version iteration (1 = 1, ... F = 16)
-                result[4] = int(pda[5], 16)
+                # Minor version iteration (1 = 1, ... A = 10 ...)
+                result[4] = (string.digits + string.ascii_uppercase).index(pda[5])
             else:
                 # Year (... R = 2018, S = 2019, T = 2020 ...)
                 result[2] = (ord(pda[-3]) - ord("R")) + 2018
                 # Month (A = 01, B = 02, ... L = 12)
                 result[3] = ord(pda[-2]) - ord("A")
-                # Minor version iteration (1 = 1, ... F = 16)
-                result[4] = int(pda[-1], 16)
+                # Minor version iteration (1 = 1, ... A = 10 ...)
+                result[4] = (string.digits + string.ascii_uppercase).index(pda[-1])
             return result
         raise ValueError("Invalid firmware format.")

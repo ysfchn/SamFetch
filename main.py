@@ -18,24 +18,6 @@ def get_env_bool(name : str, default : bool) -> bool:
     return bool(get_env_int(name, default))
 
 
-def build_endpoint_doc() -> str:
-    data = {}
-    for route in bp.routes:
-        doc = (route.handler.__doc__ or "").replace("    ", "").replace("\n", "")
-        data["/" + route.path] = [y + ("" if y.endswith(".") else ".") for y in doc.split(". ")]
-    data = dict(sorted(data.items(), key = lambda x: x[0]))
-    result = []
-    first = True
-    for k, v in data.items():
-        result.append(("  " if not first else "") + k.ljust(60) + v[0])
-        if first:
-            first = False
-        for i in v[1:]:
-            result.append((62 * " ") + i)
-        result.append("")
-    return "\n".join(result)
-
-
 # Environment variables
 app = Sanic("SamFetch")
 app.config.SAMFETCH_HIDE_TEXT = get_env_bool("SAMFETCH_HIDE_TEXT", False)
@@ -44,8 +26,7 @@ app.config.SAMFETCH_CHUNK_SIZE = get_env_int("SAMFETCH_CHUNK_SIZE", 1485760)
 app.config.FALLBACK_ERROR_FORMAT = "json"
 
 
-NOTICE = \
-f"""
+NOTICE = """
           _____                 ______   _       _     
          / ____|               |  ____| | |     | |    
         | (___   __ _ _ __ ___ | |__ ___| |_ ___| |__  
@@ -70,7 +51,25 @@ f"""
         
         ## Endpoints
 
-        (endpoints)
+        /firmware/:region/:model/list                   List the available firmware versions of a specified model and region.
+                                                        The first item in the list is the latest version (with also "is_latest" key)
+
+        /firmware/:region/:model/latest                 Gets the latest firmware version for the device and redirects to /firmware/:region/:model/:firmware
+        /firmware/:region/:model/latest?download=1      [*] If "download" query parameter has provided with any value, instead of giving firmware information, 
+                                                            the download will start automatically with decryption enabled. It basically redirects to next endpoint.
+
+        /firmware/:region/:model/:firmware              Gets the firmware details and includes values that required for downloading the firmware
+        /firmware/:region/:model/:firmware?download=1   such as path, filename and decryption key. To start a download, provide these values
+                                                        to /download endpoint.
+                                                        [*] If "download" query parameter has provided with any value, instead of giving firmware information, 
+                                                            the download will start automatically with decryption enabled. It basically redirects to next endpoint.
+        
+        /download/:path/:filename                       Downloads the firmware with given path and filename. Path, filename and decryption key can be found on
+        /download/:path/:filename?decrypt=(KEY)         /firmware/:region/:model/:firmware endpoint. To enable decrypting, add "decrypt" query parameter with decryption key.
+                                                        If "decrypt" parameter is not provided, the encrypted firmware will be downloaded instead.
+
+                                                        Additionally, with "filename" query parameter, you can change the name of the downloaded file.
+                                                        If you want to do that, don't include file extension, as it will be added automatically according to non-decrypt mode and decrypt mode.
         
         ## Global Configuration
 
@@ -87,7 +86,7 @@ f"""
         SAMFETCH_CHUNK_SIZE                             Specifies how many bytes must read in
                                                         a single iteration when downloading the firmware.
                                                         Default is set to 1485760 (1 megabytes)
-"""
+    """
 
 
 @app.middleware("response")
@@ -109,10 +108,7 @@ async def http_error(request : Request, exception : HTTPError):
 @app.get("/")
 async def home(request : Request):
     return empty() if request.app.config.SAMFETCH_HIDE_TEXT else \
-    text(
-        ("\n".join(x.replace("        ", "  ", 1) for x in NOTICE.splitlines()) + "\n\n").replace("(endpoints)",
-        build_endpoint_doc())
-    )
+    text(("\n".join(x.replace("        ", "  ", 1) for x in NOTICE.splitlines()) + "\n\n"))
 
 
 @app.get("/github")
