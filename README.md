@@ -2,14 +2,12 @@
 
 A simple Web API to download Samsung Stock ROMs from Samsung's own Kies servers, without any restriction, rate-limit, authorization or passwords. Made in Python, built with Sanic, and ready to deploy to Heroku with one-click.
 
-If you have a Heroku account already, you can click the "Deploy" button below and host your own instance without any setup. 
-
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/ysfchn/SamFetch)
 
-> **Why you wanting us to host it ourselves instead of publishing a public URL?**<br>
-> SamFetch doesn't have any rate-limits to keep it free (as in freedom) as much as I can. However, since this will allow spammers I recommend hosting your own instance, as you will have more control over it and you will have own private instance.
+> **Why you wanting us to host it ourselves instead of publishing a public instance URL?**<br>
+> SamFetch doesn't have any rate-limits to keep it free (as in freedom) as much as I can. However, since this can allow malicious requests (such as spams) I recommend hosting your own instance, as you will have more control over it and you will have own private instance.
 >
-> After typing your app name, deploy the app and your instance will be ready! Head over to `https://<app_name>.herokuapp.com/` and you will see a home page, and it will show how to use the SamFetch.
+> After typing your app name, deploy the app and your instance will be ready! Head over to `https://<app_name>.herokuapp.com/` and you will see a home page which includes a help text.
 
 | ⚠ **WARNING** |
 |:--------------|
@@ -43,6 +41,58 @@ Install dependencies with `pip install -r requirements.txt` and run with:
 ```
 sanic main.app
 ```
+
+<details>
+    <summary><b>Example requests</b></summary>
+
+    ```
+    $ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L
+    {
+        "display_name": "Galaxy Note5",
+        "size": 2530817088,
+        "size_readable": "2.36 GB",
+        "filename": "SM-N920C_1_20190117104840_n2lqmc6w6w_fac.zip.enc4",
+        "path": "/neofus/9/",
+        "version": "Nougat (Android 7.0)",
+        "encrypt_version": 4,
+        "last_modified": 20190117144207,
+        "decrypt_key": "0727c304eea8a4d14835a4e6b02c0ce3",
+        "firmware_changelog_url": null,
+        "platform": "Android",
+        "crc": "1505693374",
+        "pda": {
+            "bootloader": "U5",
+            "date": "2018.11",
+            "major": 2,
+            "minor": 3
+        }
+    }
+    ```
+
+    ```
+    $ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/list
+    [
+        {
+            "firmware": "N920CXXU5CRL3/N920COJV4CRB3/N920CXXU5CRL1/N920CXXU5CRL3",
+            "pda": {
+            "bootloader": "U5",
+            "date": "2018.11",
+            "major": 2,
+            "minor": 3
+            },
+            "is_latest": true
+        }
+    ]
+    ```
+
+    ```
+    $ curl http://127.0.0.1:8000/download/neofus/9/SM-N920C_1_20190117104840_n2lqmc6w6w_fac.zip.enc4?decrypt=0727c304eea8a4d14835a4e6b02c0ce3 -O .
+      % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                     Dload  Upload   Total   Spent    Left  Speed
+    100 27.0M    0 27.0M    0     0  1282k      0 --:--:--  0:00:21 --:--:-- 1499k
+    ```
+
+</details>
 
 ## Notes
 

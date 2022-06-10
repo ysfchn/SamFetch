@@ -30,9 +30,9 @@ NOTICE = """
           _____                 ______   _       _     
          / ____|               |  ____| | |     | |    
         | (___   __ _ _ __ ___ | |__ ___| |_ ___| |__  
-         \___ \ / _` | '_ ` _ \|  __/ _ \ __/ __| '_ \ 
+         \\___ \\ / _` | '_ ` _ \\|  __/ _ \\ __/ __| '_ \\ 
          ____) | (_| | | | | | | | |  __/ || (__| | | |
-        |_____/ \__,_|_| |_| |_|_|  \___|\__\___|_| |_|
+        |_____/ \\__,_|_| |_| |_|_|  \\___|\\__\\___|_| |_|
 
         A simple HTTP API to download Samsung Stock ROMs from Samsung's own servers without any restriction.
         It doesn't have any analytics, rate-limits, download speed limit, authorization or any crap that you don't want.
