@@ -42,10 +42,11 @@ Install dependencies with `pip install -r requirements.txt` and run with:
 sanic main.app
 ```
 
+Visit the URL you see in the console to get started with SamFetch.
+
 <details>
     <summary><b>Example requests</b></summary>
 
-    ```
     $ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L
     {
         "display_name": "Galaxy Note5",
@@ -67,9 +68,7 @@ sanic main.app
             "minor": 3
         }
     }
-    ```
 
-    ```
     $ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/list
     [
         {
@@ -83,14 +82,11 @@ sanic main.app
             "is_latest": true
         }
     ]
-    ```
 
-    ```
     $ curl http://127.0.0.1:8000/download/neofus/9/SM-N920C_1_20190117104840_n2lqmc6w6w_fac.zip.enc4?decrypt=0727c304eea8a4d14835a4e6b02c0ce3 -O .
       % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                      Dload  Upload   Total   Spent    Left  Speed
     100 27.0M    0 27.0M    0     0  1282k      0 --:--:--  0:00:21 --:--:-- 1499k
-    ```
 
 </details>
 
