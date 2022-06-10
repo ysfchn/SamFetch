@@ -4,7 +4,7 @@ from typing import Optional
 from sanic import Blueprint
 from sanic.request import Request
 from json import loads
-from sanic.response import json, redirect, stream, text
+from sanic.response import json, redirect
 from samfetch.kies import KiesData, KiesFirmwareList, KiesRequest, KiesUtils
 from samfetch.session import Session
 from samfetch.crypto import start_decryptor
@@ -78,7 +78,7 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
     """
     Gets the binary details such as filename and decrypt key. \n
     `firmware` is the firmware code of the device that you got from `/list` endpoint. \n\n
-    `decrypt_key` is used for decrypting the file after downloading. It presents a hex string. Pass it to `/download` endpoint.
+    `decrypt_key` is used for decrypting the file after downloading.
     """
     # Create new session.
     client = httpx.AsyncClient()

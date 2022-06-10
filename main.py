@@ -4,7 +4,7 @@ from sanic.response import redirect, text, empty
 from httpx import HTTPError, NetworkError
 from web import bp, SamfetchError, make_error
 
-def get_env_int(name : str, default):
+def get_env_int(name : str, default) -> int:
     if name not in os.environ:
         return default
     _val = os.environ[name]
@@ -13,10 +13,12 @@ def get_env_int(name : str, default):
     else:
         return default
 
-def get_env_bool(name : str, default : bool):
+
+def get_env_bool(name : str, default : bool) -> bool:
     return bool(get_env_int(name, default))
 
-def build_endpoint_doc():
+
+def build_endpoint_doc() -> str:
     data = {}
     for route in bp.routes:
         doc = (route.handler.__doc__ or "").replace("    ", "").replace("\n", "")
@@ -34,6 +36,7 @@ def build_endpoint_doc():
     return "\n".join(result)
 
 
+# Environment variables
 app = Sanic("SamFetch")
 app.config.SAMFETCH_HIDE_TEXT = get_env_bool("SAMFETCH_HIDE_TEXT", False)
 app.config.SAMFETCH_ALLOW_ORIGIN = os.environ.get("SAMFETCH_ALLOW_ORIGIN", None) or "*"
@@ -84,8 +87,6 @@ f"""
         SAMFETCH_CHUNK_SIZE                             Specifies how many bytes must read in
                                                         a single iteration when downloading the firmware.
                                                         Default is set to 1485760 (1 megabytes)
-
-        SAMFETCH_GITHUB_URL                             GitHub URL for 
 """
 
 

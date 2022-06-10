@@ -119,6 +119,7 @@ class KiesConstants:
     #
     # It is still unknown that how to download test firmwares, but several search results got me to find this URL.
     # However, looks like it requires some type of authorization with query parameters instead of nonce.
+    # - https://forum.xda-developers.com/t/oneui-4-0-public-beta-download-and-install-in-here-exynos.4333281/page-4
 
     # Generate nonce url
     NONCE_URL = "https://neofussvr.sslcs.cdngc.net/NF_DownloadGenerateNonce.do"
