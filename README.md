@@ -29,15 +29,16 @@ If you have a Heroku account already, you can click the "Deploy" button below an
 
 ## Endpoints
 
-| Endpoint | Description      | Notes       |
-|:---------|:-----------------|:------------|
-| `/csc`   | Lists all available CSC. Note that the list may be incomplete. | |
-| `/list/:region/:model` | Lists all firmware versions for a specific device and region. Region examples can be found on /csc endpoint. Note that some firmwares may be only available to specific regions. | |
-| `/binary/:region/:model/:firmware` | Gets details for a firmware such as download size, file name and decryption key. You can get firmware from /list endpoint. | |
-| `/download/:path/:firmware` | Downloads a firmware. You can get decrypt key, path and file from /binary endpoint. | Query parameters are available for this endpoint:<br><br>`decrypt` - Takes an decrypt key, so SamFetch can decrypt the firmware while sending it to you. If not provided, SamFetch will download the encrypted file and you will need to decrypt manually.<br>`filename` - Overwrites the filename that shows up in the download client, defaults to Samsung's own firmware name. |
-| `/direct/:region/:model` or `/:region/:model` | Executes all required endpoints and directly starts dowloading the latest firmware with one call. It is useful for end-users who don't want to integrate the API in a client app. |
+| Endpoint | Description      |
+|:---------|:-----------------|
+| <samp>/firmware/:region/:model/list</samp> | List the available firmware versions of a specified model and region. The first item in the list is the latest version (with also "is_latest" key) |
+| <samp>/firmware/:region/:model/latest</samp><br><samp>/firmware/:region/:model/latest?download=1</samp> | Gets the latest firmware version for the device and redirects to `/firmware/:region/:model/:firmware`<br><br>_If "download" query parameter has provided with any value, the download will start automatically with decryption enabled. It basically redirects to next endpoint._ |
+| <samp>/firmware/:region/:model/:firmware</samp><br><samp>/firmware/:region/:model/:firmware?download=1</samp> | Gets the firmware details and includes values that required for downloading the firmware such as path, filename and decryption key. To start a download, provide these values to `/download` endpoint.<br><br>_If "download" query parameter has provided with any value, the download will start automatically with decryption enabled. It basically redirects to next endpoint._ |
+| <samp>/download/:path/:filename</samp><br><samp>/download/:path/:filename?decrypt=(KEY)</samp> | Downloads the firmware with given path and filename. Path, filename and decryption key can be found on `/firmware/:region/:model/:firmware` endpoint. To enable decrypting, add "decrypt" query parameter with decryption key. If "decrypt" parameter is not provided, the encrypted firmware will be downloaded instead.<br><br>Additionally, with "filename" query parameter, you can change the name of the downloaded file. If you want to do that, don't include file extension, as it will be added automatically according to non-decrypt mode and decrypt mode. |
 
 ## Running
+
+Install dependencies with `pip install -r requirements.txt` and run with:
 
 ```
 sanic main.app
