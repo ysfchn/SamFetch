@@ -17,15 +17,15 @@ If you have a Heroku account already, you can click the "Deploy" button below an
 
 ## Features
 
-* It doesn't collect any analytics, store cookies or have any rate-limits as it directly calls the Samsung servers.
+* It doesn't include any analytics, store cookies or have any rate-limits as it directly calls the Samsung servers without involving any 3rd party.
 
-* As Samsung server requests authorization before serving firmwares, it is made automatically by SamFetch itself, so you don't need any authorization or add any headers on your end.
+* As Samsung server requests authorization before serving firmwares, it is done automatically by SamFetch itself, so you don't need any authorization or add any headers on your end.
 
-* It doesn't pre-download the firmware and it doesn't have any background jobs/queue for downloading and decrypting the firmware, so this means the firmware file will directly stream to your browser or your download client, while decrypting the chunks. 
+* It doesn't pre-download the firmware and have any background jobs/queue for downloading and decrypting the firmware, so this means the firmware file will directly stream to you, while decrypting the firmware on-the-fly. 
 
-* SamFetch supports partial downloads _("Range" header)_ which means it supports pausing and resuming the download in your download client / browser's own downloader. [Note that partial downloads are not allowed when decrypting has enabled, see here.](#partial-downloads)
+* SamFetch supports partial downloads with ["Range" header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range) which means it supports pausing and resuming the download. Note that partial downloads are not allowed when decrypting has enabled, due to some problems, [see here.](#partial-downloads)
 
-* You can configure your SamFetch instance such as adding CORS headers and change chunk size with environment variables.
+* You can configure your SamFetch instance with environment variables and edit allowed origin for CORS headers and chunk size.
 
 ## Endpoints
 
@@ -48,19 +48,21 @@ sanic main.app
 
 #### Downloading firmwares
 
-Samsung gives firmwares as encrypted binaries. SamFetch gives an option to download firmware decrypted while downloading it or you can download it encrypted and decrypt manually yourself. When you get firmware details with `/binary`, SamFetch gives a `decrypt_key` (represented as hex string). Then you can give the key to `/download` endpoint by setting `decrypt` query parameter with your `decrypt_key`.
+Normally, Samsung gives firmware files as encrypted. To actually get the firmware archive, you need to decrypt it before. SamFetch can decrypt firmware files on-the-fly, so in both method (decrypt and non-decrypt) you see no difference when downloading the firmwares.
+
+To enable decryption in `/download` endpoint, you need to give a decryption key which can be found in `/firmware/:region/:model/:firmware` endpoint. Get the `decrypt_key` and pass it to `/download` endpoint with `decrypt` query parameter.
 
 If you prefer to decrypt firmwares manually, sadly you can't do it with SamFetch (as it is an web application not a CLI), but you can use [Samloader](https://github.com/nlscc/samloader) which has a `decrypt` command.
 
 #### Partial downloads
 
-When an encrypted file has decrypted, the file size becomes slightly different from the encrypted file. The thing is, SamFetch sends the firmware size, so your download client can show a progress bar and calculate ETA. However, when the decrypted size is not equal with actual size, download clients will stop the downloads. To fix failed downloads, **SamFetch won't send the firmware size when decrypting has enabled.**
+When an encrypted file has decrypted, the file size becomes slightly different from the encrypted file. The thing is, SamFetch reports the firmware size, so your download client can show a progress bar and calculate ETA. However, when the decrypted size is not equal with actual size, download clients will stop the downloads. To fix failed downloads, **SamFetch won't report the firmware size when decrypting has enabled.**
 
 #### Verifing the files
 
-Samsung (Kies) servers only gives a CRC hash value which is for encrypted file, but as SamFetch can also decrypt the file while sending it to user, it is not possible to know the hash of the firmware. You can download encrypted the file and decrypt manually after checking the CRC. 
+Samsung (Kies) servers only gives a CRC hash value which is for encrypted file, but as SamFetch can also decrypt the file while sending it to user, it is not possible to know the hash of the decrypted firmware. You can download encrypted the file and decrypt manually after checking the CRC. 
 
-#### Updating your SamFetch instance
+#### Updating your SamFetch instance (Heroku)
 
 There are several ways to update your Heroku app when it is deployed from deploy button, however the easiest one is deleting your old deployed app and deploying it again from deploy button. If you want to keep the same URL, you can always rename your app in Heroku dashboard, renaming app also changes the app URL.
 
