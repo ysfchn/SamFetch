@@ -112,6 +112,10 @@ Samsung (Kies) servers only gives a CRC hash value which is for encrypted file, 
 
 There are several ways to update your Heroku app when it is deployed from deploy button, however the easiest one is deleting your old deployed app and deploying it again from deploy button. If you want to keep the same URL, you can always rename your app in Heroku dashboard, renaming app also changes the app URL.
 
+## Resources
+
+If you want to do more with Samsung firmwares, or SamFetch is not enough for you, or just want to learn more stuff, you can check [resources](RESOURCES.md).
+
 ## Credits
 
 This is a Web API variant of [Samloader](https://github.com/nlscc/samloader) project. I reimplemented the Samloader's functions as Web API routes and simplified the code for end-user to eliminate the authorization request, so SamFetch wouldn't be possible without Samloader.

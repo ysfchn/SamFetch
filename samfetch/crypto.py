@@ -25,7 +25,6 @@ async def has_next(it) -> Generator[Tuple[bool, Any], None, None]:
 
 
 async def start_decryptor(response : BaseHTTPResponse, iterator : AsyncIterator, key : Optional[bytes] = None, client : Optional[Any] = None):
-    # DECRYPT WITH KEY
     if key:
         cipher = AES.new(key, AES.MODE_ECB)
         async for continues, chunk in has_next(iterator):
@@ -34,7 +33,7 @@ async def start_decryptor(response : BaseHTTPResponse, iterator : AsyncIterator,
             if continues:
                 await response.send(data)
             else:
-                await response.send(Crypto.unpad(data)) # + bytes([0] * 10))
+                await response.send(Crypto.unpad(data))
         if client:
             await client.aclose()
         await response.eof()
