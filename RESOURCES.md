@@ -12,7 +12,7 @@ These are some resources about Samsung firmwares that I find useful. If you want
 
 After I searched a lot, I couldn't find an "official" endpoint that does this job, however if you are okay with connecting to a 3rd party, then using SamMobile can be an option.
 
-<samp>https://www.sammobile.com/wp-content/plugins/sam-firmwarepage/includes/SMFirmware/ajax/ajax.countriesbymodel.php?model=SM-N920C</samp> <sup>[Archive](https://web.archive.org/web/20220610213411/https://www.sammobile.com/wp-content/plugins/sam-firmwarepage/includes/SMFirmware/ajax/ajax.countriesbymodel.php?model=SM-N920C)<sup>
+<samp>https://www.sammobile.com/wp-content/plugins/sam-firmwarepage/includes/SMFirmware/ajax/ajax.countriesbymodel.php?model=SM-N920C</samp> <sup>[Archive][4]<sup>
 
 Here is a small part of the response:
 
@@ -41,9 +41,9 @@ Beta firmwares, as its name implies, are non-production firmwares which served o
 
 Beta firmwares can be listed with this URL, with region and model.
 
-<samp>http://fota-cloud-dn.ospserver.net/firmware/INS/SM-G975F/version.test.xml</samp> <sup>[Archive](https://web.archive.org/web/20220610213308/http://fota-cloud-dn.ospserver.net/firmware/INS/SM-G975F/version.test.xml)<sup>
+<samp>http://fota-cloud-dn.ospserver.net/firmware/INS/SM-G975F/version.test.xml</samp> <sup>[Archive][3]<sup>
 
-Here is a small part of the response, as you can see, they are not in common firmware string pattern, instead they are represented in hexadecimal. 
+Here is a small part of the response, as you can see, they are not in common firmware string pattern, instead they are represented in hexadecimal.<sup><a href="#f-1">1</a></sup>
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" ?>
@@ -62,21 +62,44 @@ Here is a small part of the response, as you can see, they are not in common fir
 ...
 ```
 
-After researching a bit, I came across to this endpoint:
+After researching a bit, I came across to this URL:
 
 <samp>http://fota-secure-dn.ospserver.net/firmware/INS/SM-G975F/nspx/e1dff8735a1747839526d7975d87d402.bin</samp>
 
-Obviously, simply visiting the URL says "Forbidden" because it appears to be, some type of authorization is needed. Searching [the pattern on Google](https://google.com/search?q="http://fota-secure-dn.ospserver.net/firmware/*/*/nspx") returned other firmware URLs and they all contain bunch of query parameters.
+Obviously, simply visiting the URL says "Forbidden" because it appears to be, some type of authorization is needed. Searching [the pattern on Google][2] returned other firmware URLs and they all contain bunch of query parameters.
 
 <samp>http://fota-secure-dn.ospserver.net/firmware/INS/SM-G975F/nspx/e1dff8735a1747839526d7975d87d402.bin?px-time=60267a1a&px-hash=95f16190460fb143455b9b293ac49410&px-wid=67220201214-WCA15575373&px-wctime=2020-12-14%2012:52:41&px-unum=&px-nb=UGtezEZ854jbmFcvWGxLEA==</samp><br>
-[Source](https://r1.community.samsung.com/t5/galaxy-s/one-ui-3-beta-s10/td-p/7994711/page/2) ・ [Source in archive.org](https://web.archive.org/web/20220610211813/https://r1.community.samsung.com/t5/galaxy-s/one-ui-3-beta-s10/td-p/7994711/page/2)
+<sup>[Source][5] ・ [Source in archive.org][6]</sup>
 
 <samp>http://fota-secure-dn.ospserver.net/firmware/TMB/SM-F926U1/nspx/aa9c125f0ead436c9db1cbf4a80eeff2.bin?px-time=61ef7655&px-hash=81dc7034209ba5844f16c8299d988292&px-wid=5050010-WSA211126040227&px-wctime=2021-11-26%2004:02:27&px-unum=&px-nb=UGtezEZ854jbmFcvWGxLEA==</samp><br>
-[Source](https://www.reddit.com/r/GalaxyFold/comments/r2dhqd/beta_3_available_on_tmobile_unlocked/) ・ [Source in archive.org](https://web.archive.org/web/20220610212404/https://www.reddit.com/r/GalaxyFold/comments/r2dhqd/beta_3_available_on_tmobile_unlocked/)
+<sup>[Source][7] ・ [Source in archive.org][8]</sup>
 
 <samp>http://fota-secure-dn.ospserver.net/firmware/DBT/SM-G991B/nspx/cb1275be4f1a4fd399e5da632e5b6bfc.bin?px-time=6199f52e&px-hash=917270a21173323c4ba14ea728608e7d&px-wid=6095013-WSA210922072845&px-wctime=2021-09-22%2007:28:45&px-unum=&px-nb=UGtezEZ854jbmFcvWGxLEA==</samp><br>
-[Source](https://github.com/fonix232/OneUI4/blob/main/README.md) ・ [Source in archive.org](https://web.archive.org/web/20220610212854/https://github.com/fonix232/OneUI4/blob/main/README.md)
+<sup>[Source][9] ・ [Source in archive.org][10]</sup>
 
-However these URLs return 403 Forbidden at the moment, I think they was available for a short time, now released to production, or Samsung has just changed the way of access to the beta firmwares. According to some people who share these links, they got these download links by joining to some type of Samsung beta firmware program and copied the download URL while downloading the beta firmwares. 
+However these URLs return 403 Forbidden too, I think they was available for a short time (the newest published link was posted 7 months ago), now released to production, or Samsung has just changed the way of access to the beta firmwares. According to some people who share these links, they say they got these download links by joining to some type of [Samsung Beta Program][1] and captured the download URL. 
+
+Enrolling to Beta program is done on Samsung Members application. However, the program is geo-restricted, so even you have a combatible device, a VPN and a SIM card from the connected VPN's country may be needed.<sup><a href="#f-2">2</a></sup> After, enrolling to Beta program, beta firmwares can be downloaded from Software Update in Settings.
+
+Without enrolling to Beta program and downloading the firmware through the links above, manual installation is possible from stock recovery via ADB.<sup><a href="#f-3">3</a></sup>
+
+By looking to these URLs, it is possible to say `px-nb` query parameter is a constant with `UGtezEZ854jbmFcvWGxLEA==` value, because it exists on all URLs regardless device model and firmware name.
 
 ---
+
+### Footnotes
+
+<sup id="f-1">1</sup> In some cases, beta firmwares can be displayed in classic firmware format too (I assume once beta is released as stable).<br>
+<sup id="f-2">2</sup> https://youtu.be/TF90XALbJ-0?t=164<br>
+<sup id="f-3">3</sup> https://youtu.be/TPBPik9V2_8?t=421<br>
+
+[1]: https://developer.samsung.com/one-ui-beta
+[2]: https://google.com/search?q="http://fota-secure-dn.ospserver.net/firmware/*/*/nspx"
+[3]: https://web.archive.org/web/20220610213308/http://fota-cloud-dn.ospserver.net/firmware/INS/SM-G975F/version.test.xml
+[4]: https://web.archive.org/web/20220610213411/https://www.sammobile.com/wp-content/plugins/sam-firmwarepage/includes/SMFirmware/ajax/ajax.countriesbymodel.php?model=SM-N920C
+[5]: https://r1.community.samsung.com/t5/galaxy-s/one-ui-3-beta-s10/td-p/7994711/page/2
+[6]: https://web.archive.org/web/20220610211813/https://r1.community.samsung.com/t5/galaxy-s/one-ui-3-beta-s10/td-p/7994711/page/2
+[7]: https://www.reddit.com/r/GalaxyFold/comments/r2dhqd/beta_3_available_on_tmobile_unlocked/
+[8]: https://web.archive.org/web/20220610212404/https://www.reddit.com/r/GalaxyFold/comments/r2dhqd/beta_3_available_on_tmobile_unlocked/
+[9]: https://github.com/fonix232/OneUI4/blob/main/README.md
+[10]: https://web.archive.org/web/20220610212854/https://github.com/fonix232/OneUI4/blob/main/README.md
