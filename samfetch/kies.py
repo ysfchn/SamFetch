@@ -287,7 +287,7 @@ class KiesUtils:
             # 3 - Month
             # 4 - Minor version
             # Make sure the bootloader column exists.
-            if (pda[0] in ["U", "S"]) and (pda[1].isnumeric()):
+            if (pda[0] in ["U", "S"]):
                 # Bootloader version (U = Upgrade, S = Security)
                 result[0] = pda[0:2]
                 # Major version iteration (A = 0, B = 1, ... Z = Public Beta)

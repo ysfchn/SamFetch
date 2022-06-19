@@ -43,7 +43,7 @@ Beta firmwares can be listed with this URL, with region and model.
 
 <samp>http://fota-cloud-dn.ospserver.net/firmware/INS/SM-G975F/version.test.xml</samp> <sup>[Archive][3]<sup>
 
-Here is a small part of the response, as you can see, they are not in common firmware string pattern, instead they are represented in hexadecimal.<sup><a href="#f-1">1</a></sup>
+Here is a small part of the response, as you can see, they are not in plain firmware string, instead firmware names hashed as MD5.<sup><a href="#f-1">1</a></sup>
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" ?>
