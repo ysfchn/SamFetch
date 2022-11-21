@@ -37,55 +37,17 @@ NOTICE = """
         A simple HTTP API to download Samsung Stock ROMs from Samsung's own servers without any restriction.
         It doesn't have any analytics, rate-limits, download speed limit, authorization or any crap that you don't want.
         
-        SamFetch pulls firmware files from Samsung's servers and sends back to you. Oh, Samsung's own firmware
-        files are encrypted, however, SamFetch can decrypt the firmware while sending it to you! But if you want to
-        speed up the download process, you can prefer to not to decrypt the firmware and get the encrypted archive.
+        SamFetch pulls firmware files from Samsung's servers and sends back to you, so it acts like a proxy. 
+        Samsung's own firmwares are encrypted, but SamFetch can decrypt the firmware on-the-fly! This is an opt-in
+        behavior, means you can also get the original, encrypted firmware if you want.
 
-        This project is licensed with AGPLv3.
+        ---
+
+        SamFetch is free & open source, licensed under AGPLv3.
         https://github.com/ysfchn/SamFetch
-
-        ## Credits
 
         This is a Web API variant of samloader (https://github.com/nlscc/samloader).
         SamFetch wouldn't be possible without Samloader.
-        
-        ## Endpoints
-
-        /firmware/:region/:model/list                   List the available firmware versions of a specified model and region.
-                                                        The first item in the list is the latest version (with also "is_latest" key)
-
-        /firmware/:region/:model/latest                 Gets the latest firmware version for the device and redirects to /firmware/:region/:model/:firmware
-        /firmware/:region/:model/latest?download=1      [*] If "download" query parameter has provided with any value, instead of giving firmware information, 
-                                                            the download will start automatically with decryption enabled. It basically redirects to next endpoint.
-
-        /firmware/:region/:model/:firmware              Gets the firmware details and includes values that required for downloading the firmware
-        /firmware/:region/:model/:firmware?download=1   such as path, filename and decryption key. To start a download, provide these values
-                                                        to /download endpoint.
-                                                        [*] If "download" query parameter has provided with any value, instead of giving firmware information, 
-                                                            the download will start automatically with decryption enabled. It basically redirects to next endpoint.
-        
-        /download/:path/:filename                       Downloads the firmware with given path and filename. Path, filename and decryption key can be found on
-        /download/:path/:filename?decrypt=(KEY)         /firmware/:region/:model/:firmware endpoint. To enable decrypting, add "decrypt" query parameter with decryption key.
-                                                        If "decrypt" parameter is not provided, the encrypted firmware will be downloaded instead.
-
-                                                        Additionally, with "filename" query parameter, you can change the name of the downloaded file.
-                                                        If you want to do that, don't include file extension, as it will be added automatically according to non-decrypt mode and decrypt mode.
-        
-        ## Global Configuration
-
-        You can set environment variables to change configuration of your SamFetch instance.
-
-        SAMFETCH_HIDE_TEXT                              Only 0 or 1. Set the value to 1 if you don't 
-                                                        want this help text.
-
-        SAMFETCH_ALLOW_ORIGIN                           Sets the "Access-Control-Allow-Origin" header
-                                                        value. Settings this to "*" (wildcard) allows
-                                                        all domains to access this SamFetch instance.
-                                                        Default is set to "*".
-
-        SAMFETCH_CHUNK_SIZE                             Specifies how many bytes must read in
-                                                        a single iteration when downloading the firmware.
-                                                        Default is set to 1485760 (1 megabytes)
     """
 
 

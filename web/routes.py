@@ -3,18 +3,19 @@ __all__ = ["bp"]
 from typing import Optional
 from sanic import Blueprint
 from sanic.request import Request
-from json import loads
 from sanic.response import json, redirect
+from sanic.exceptions import NotFound
 from samfetch.kies import KiesData, KiesFirmwareList, KiesRequest, KiesUtils
 from samfetch.session import Session
 from samfetch.crypto import start_decryptor
 from web.exceptions import make_error, SamfetchError
 import httpx
+import re
 
 bp = Blueprint(name = "Routes")
 
 
-@bp.get("/firmware/<region:str>/<model:str>/list")
+@bp.get("/<region:str>/<model:str>/list")
 async def get_firmware_list(request : Request, region : str, model : str):
     """
     List the available firmware versions of a specified model and region.
@@ -32,45 +33,26 @@ async def get_firmware_list(request : Request, region : str, model : str):
     # Check if model is correct by checking the "versioninfo" key.
     if firmwares.exists:
         # Return the firmware data.
-        ff = KiesUtils.read_firmware(firmwares.latest)
-        f = [{ 
-            "firmware": firmwares.latest,
-            "pda": {
-                "bootloader": ff[0],
-                "date": f"{ff[2]}.{ff[3]}",
-                "major": ff[1],
-                "minor": ff[4]
-            },
-            "is_latest": True
-        }]
-        for i in firmwares.alternate:
-            ii = KiesUtils.read_firmware(i)
-            f.append({
-                "firmware": i,
-                "pda": {
-                    "bootloader": ii[0],
-                    "date": f"{ii[2]}.{ii[3]}",
-                    "major": ii[1],
-                    "minor": ii[4]
-                }
-            })
-        return json(f)
+        ff = []
+        for i, f in enumerate([firmwares.latest] + firmwares.alternate):
+            info = KiesUtils.read_firmware_dict(f)
+            fff = {"firmware": f}
+            if i == 0:
+                fff["is_latest"] = True
+            fff["pda"] = info
+            ff.append(fff)
+        return json(ff)
     # Raise exception when device couldn't be found.
     if firmwares._versions == None:
         raise make_error(SamfetchError.FIRMWARE_LIST_EMPTY, 404)
     raise make_error(SamfetchError.FIRMWARE_CANT_PARSE, 404)
 
 
-@bp.get("/firmware/<region:str>/<model:str>/latest")
-async def get_firmware_latest(request : Request, region : str, model : str):
+@bp.get("/<region:str>/<model:str>/<mode:(latest|latest/download)>")
+async def get_firmware_latest(request : Request, region : str, model : str, mode : str):
     """
     Gets the latest firmware version for the device and redirects to its information.
-    If "download" query parameter has provided with any value, instead of giving firmware information, 
-    the download will start automatically with decryption enabled.
     """
-    # Auto download args
-    args = request.get_args()
-    auto_download : bool = args.get("download", None) != None
     # Create new session.
     client = httpx.AsyncClient()
     response = await client.send(
@@ -84,7 +66,7 @@ async def get_firmware_latest(request : Request, region : str, model : str):
     firmwares = KiesFirmwareList.from_xml(response.text)
     # Check if model is correct by checking the "versioninfo" key.
     if firmwares.exists:
-        return redirect(f"/firmware/{region}/{model}/{firmwares.latest}" + ("" if not auto_download else "?download=1"))
+        return redirect(f"/{region}/{model}/{firmwares.latest}" + ("/download" if "/download" in mode else ""))
     # Raise exception when device couldn't be found.
     if firmwares._versions == None:
         raise make_error(SamfetchError.FIRMWARE_LIST_EMPTY, 404)
@@ -92,17 +74,17 @@ async def get_firmware_latest(request : Request, region : str, model : str):
 
 
 # Gets the binary details such as filename and decrypt key.
-@bp.get("/firmware/<region:str>/<model:str>/<firmware:path>")
-async def get_binary_details(request : Request, region: str, model: str, firmware: str):
+@bp.get("/<region:str>/<model:str>/<firmware_path:([A-Z0-9]*/[A-Z0-9]*/[A-Z0-9]*/[A-Z0-9]*[/download]*)>")
+async def get_binary_details(request : Request, region: str, model: str, firmware_path: str):
     """
     Gets the firmware details such as path, filename and decrypt key. 
     Use these values to start downloading the firmware file.
-    If "download" query parameter has provided with any value, instead of giving firmware information, 
-    the download will start automatically with decryption enabled.
     """
-    # Auto download args
-    args = request.get_args()
-    auto_download : bool = args.get("download", None) != None
+    # Check if "/download" path has appended to firmware value.
+    is_download = firmware_path.removesuffix("/").endswith("/download")
+    firmware = firmware_path.removesuffix("/").removesuffix("/download")
+    if not re.match(r"^[A-Z0-9]*/[A-Z0-9]*/[A-Z0-9]*/[A-Z0-9]*$", firmware):
+        raise NotFound(f"Requested URL {request.path} not found")
     # Create new session.
     client = httpx.AsyncClient()
     nonce = await client.send(KiesRequest.get_nonce())
@@ -124,7 +106,6 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             raise make_error(SamfetchError.FIRMWARE_LOST, 404)
         # If file extension ends with .enc4 that means it is using version 4 encryption, otherwise 2 (.enc2).
         ENCRYPT_VERSION = 4 if str(kies.body["BINARY_NAME"]).endswith("4") else 2
-        pda_info = KiesUtils.read_firmware(firmware)
         # Generate decrypted key for decrypting the file after downloading.
         # Decrypt key gives a list of bytes, but as it is not possible to send as query parameter, 
         # we are converting it to a single HEX value.
@@ -132,8 +113,10 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             session.getv2key(firmware, model, region).hex() if ENCRYPT_VERSION == 2 else \
             session.getv4key(kies.body.get_first("LATEST_FW_VERSION", "ADD_LATEST_FW_VERSION"), kies.body["LOGIC_VALUE_FACTORY"]).hex()
         # If auto downloading has enabled, redirect to downloading the firmware.
-        if auto_download:
-            return redirect(f'/download{kies.body["MODEL_PATH"]}{kies.body["BINARY_NAME"]}?decrypt={decryption_key}')
+        download_path = f'/file{kies.body["MODEL_PATH"]}{kies.body["BINARY_NAME"]}'
+        if is_download:
+            return redirect(download_path + "?decrypt=" + decryption_key)
+        server_path = f"{request.scheme}://{request.server_name}{'' if request.server_port in [80, 443] else ':' + str(request.server_port)}"
         # Get binary details.
         return json({
             "display_name": kies.body["DEVICE_MODEL_DISPLAYNAME"],
@@ -151,19 +134,15 @@ async def get_binary_details(request : Request, region: str, model: str, firmwar
             "firmware_changelog_url": kies.body.get_first("DESCRIPTION", "ADD_DESCRIPTION"),
             "platform": kies.body["DEVICE_PLATFORM"],
             "crc": kies.body["BINARY_CRC"],
-            # Get PDA information.
-            "pda": {
-                "bootloader": pda_info[0],
-                "date": f"{pda_info[2]}.{pda_info[3]}",
-                "major": pda_info[1],
-                "minor": pda_info[4]
-            }
+            "download_path": server_path + download_path,
+            "download_path_decrypt": server_path + download_path + "?decrypt=" + decryption_key,
+            "pda": KiesUtils.read_firmware_dict(firmware)
         })
     # Raise exception when status is not 200.
     raise make_error(SamfetchError.KIES_SERVER_OUTER_ERROR, binary_info.status_code)
 
 
-@bp.get("/download/<path:path>/<filename:str>")
+@bp.get("/file/<path:path>/<filename:str>")
 async def download_binary(request : Request, path: str, filename: str):
     """
     Downloads the firmware with given path and filename.

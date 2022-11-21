@@ -307,3 +307,12 @@ class KiesUtils:
                 result[4] = (string.digits + string.ascii_uppercase).index(pda[-1])
             return result
         raise ValueError("Invalid firmware format.")
+
+    @staticmethod
+    def read_firmware_dict(firmware : str) -> dict:
+        ff = KiesUtils.read_firmware(firmware)
+        return {
+            "bl": ff[0],
+            "date": f"{ff[2]}.{ff[3]}",
+            "it": f"{ff[1]}.{ff[4]}"
+        }
