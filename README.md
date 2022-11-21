@@ -1,61 +1,119 @@
 # SamFetch
 
-A simple Web API to download Samsung Stock ROMs from Samsung's own Kies servers, without any restriction, rate-limit, authorization or passwords. Made in Python, built with Sanic, and ready to deploy to Heroku with one-click.
+A simple Web API to download Samsung Stock ROMs from Samsung's own Kies servers, without any restriction, rate-limit, authorization or passwords. Made in Python and built with Sanic.
 
-If you have a Heroku account already, you can click the "Deploy" button below and host your own instance without any setup. 
+> **Warning**<br>
+> Due to a change in Samsung servers, you can only download the latest firmware even if you asked for an older firmware. [See discussion here.](https://github.com/ysfchn/SamFetch/issues/6)
 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/ysfchn/SamFetch)
+## Deploy & Use
 
-> **Why you wanting us to host it ourselves instead of publishing a public URL?**<br>
-> SamFetch doesn't have any rate-limits to keep it free (as in freedom) as much as I can. However, since this will allow spammers I recommend hosting your own instance, as you will have more control over it and you will have own private instance.
->
-> After typing your app name, deploy the app and your instance will be ready! Head over to `https://<app_name>.herokuapp.com/` and you will see a home page, and it will show how to use the SamFetch.
+SamFetch doesn't have any rate-limits to keep it free (as in freedom) as much as I can. However, since this can allow malicious requests (such as spams) I recommend hosting your own instance, as you will have more control over it and you will have own private instance.
 
-| ⚠ **WARNING** |
-|:--------------|
-| Due to a change in Samsung servers, you can only download the latest firmware even if you asked for an older firmware. [This is not related to SamFetch.](https://github.com/ysfchn/SamFetch/issues/6) |
+SamFetch is currently tested and ready to be hosted on Docker, Heroku ([one-click deploy here](https://heroku.com/deploy?template=https://github.com/ysfchn/SamFetch)) and fly.io. As it is just Python, it should run in any Python environment by default.
+
+You can also [run in your computer locally](#running) if you don't need to host publicly.
 
 ## Features
 
-* It doesn't collect any analytics, store cookies or have any rate-limits as it directly calls the Samsung servers.
+* It doesn't include any analytics, store cookies or have any rate-limits as it directly calls the Samsung servers without involving any 3rd party.
 
-* As Samsung server requests authorization before serving firmwares, it is made automatically by SamFetch itself, so you don't need any authorization or add any headers on your end.
+* As Samsung server requests authorization before serving firmwares, it is done automatically by SamFetch itself, so you don't need any authorization or add any headers on your end.
 
-* It doesn't pre-download the firmware and it doesn't have any background jobs/queue for downloading and decrypting the firmware, so this means the firmware file will directly stream to your browser or your download client, while decrypting the chunks. 
+* The firmware file will directly stream to you, [while decrypting the firmware on-the-fly](#on-the-fly-decrypting), so no background-jobs, no queue, and no storing the firmware in disk. 
 
-* SamFetch supports partial downloads _("Range" header)_ which means it supports pausing and resuming the download in your download client / browser's own downloader. [Note that partial downloads are not allowed when decrypting has enabled, see here.](#partial-downloads)
+* SamFetch supports partial downloads with ["Range" header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range) which means it supports pausing and resuming the download. Note that partial downloads are not allowed when decrypting has enabled, due to some problems, [see here.](#partial-downloads)
 
-* You can configure your SamFetch instance such as adding CORS headers and change chunk size with environment variables.
+* You can configure your SamFetch instance with environment variables and edit allowed origin for CORS headers and chunk size.
 
 ## Endpoints
 
-| Endpoint | Description      | Notes       |
-|:---------|:-----------------|:------------|
-| `/csc`   | Lists all available CSC. Note that the list may be incomplete. | |
-| `/list/:region/:model` | Lists all firmware versions for a specific device and region. Region examples can be found on /csc endpoint. Note that some firmwares may be only available to specific regions. | |
-| `/binary/:region/:model/:firmware` | Gets details for a firmware such as download size, file name and decryption key. You can get firmware from /list endpoint. | |
-| `/download/:path/:firmware` | Downloads a firmware. You can get decrypt key, path and file from /binary endpoint. | Query parameters are available for this endpoint:<br><br>`decrypt` - Takes an decrypt key, so SamFetch can decrypt the firmware while sending it to you. If not provided, SamFetch will download the encrypted file and you will need to decrypt manually.<br>`filename` - Overwrites the filename that shows up in the download client, defaults to Samsung's own firmware name. |
-| `/direct/:region/:model` or `/:region/:model` | Executes all required endpoints and directly starts dowloading the latest firmware with one call. It is useful for end-users who don't want to integrate the API in a client app. |
+| Endpoint | Description      |
+|:---------|:-----------------|
+| <samp>/:region/:model/list</samp> | List the available firmware versions of a specified model and region. <br>The first item in the list represents the latest firmware available. |
+| <samp>/:region/:model/:firmware</samp> | Returns the firmware details, such as Android version, changelog URL, <br>date and filename which is required for downloading firmware. |
+| <samp>/:path/:filename</samp> | Starts downloading the firmware with given `path` and `filename` <br>which can be obtained in firmware details endpoint. <br>For decrypting, [add the given key as `decrypt` query parameter.](#on-the-fly-decrypting)<br>Also optionally, `filename` query parameter overwrites the <br>filename of the downloaded file. |
 
-## Notes
+### Redirects
 
-#### Downloading firmwares
+| Endpoint | Description      |
+|:---------|:-----------------|
+| <samp>/:region/:model/latest</samp> | Gets the latest firmware version for the device and <br>redirects to `/:region/:model/:firmware`. |
+| <samp>/:region/:model/latest/download</samp> | Gets the latest firmware version for the device and <br>redirects to `/:region/:model/:firmware/download`. |
+| <samp>/:region/:model/:firmware/download</samp> | Gets the firmware details for the device and <br>redirects to `/file/:path/:filename` with `decrypt` parameter. |
 
-Samsung gives firmwares as encrypted binaries. SamFetch gives an option to download firmware decrypted while downloading it or you can download it encrypted and decrypt manually yourself. When you get firmware details with `/binary`, SamFetch gives a `decrypt_key` (represented as hex string). Then you can give the key to `/download` endpoint by setting `decrypt` query parameter with your `decrypt_key`.
+## Envrionment Variables
+
+| Variable | Description      |
+|:---------|:-----------------|
+| `SAMFETCH_HIDE_TEXT` | Hides the text shown when visiting the root path. |
+| `SAMFETCH_ALLOW_ORIGIN` | Sets the "Access-Control-Allow-Origin" header value. Settings this to "\*" (wildcard) allows all domains to access this SamFetch instance. Default is set to "\*". |
+| `SAMFETCH_CHUNK_SIZE` | Specifies how many bytes must read in a single iteration when downloading the firmware. Default is set to 1485760 (1 megabytes), bigger chunk size means faster but uses more resources. |
+
+## On-the-fly Decrypting
+
+Samsung stores firmwares as encrypted. This means, in normally you are expected to download the encrypted firmware, and decrpyt it afterwards locally. However with SamFetch, the firmware file will directly stream to you, while decrypting the firmware on-the-fly, so no background-jobs, no queue, and no storing the firmware in disk. 
+
+**This behavior is opt-in**, so if you want SamFetch to decrypt the firmware on-the-fly, you need to insert the decryption key that you can also get it from SamFetch.
+
+```bash
+# Decrypt key can be found in firmware details.
+$ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L | jq .decrypt_key
+"22992da4a7f887d1c4f5bdc66d116367"
+
+# Join path and filename. Add decryption key as "decrypt" query parameter
+# The output is the URL path of the download.
+$ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L | jq '.path + .filename + "?decrypt=" + .decrypt_key'
+"/neofus/9/SM-N920C_1_20220819152351_1eub6wdeqb_fac.zip.enc4?decrypt=22992da4a7f887d1c4f5bdc66d116367"
+
+# SamFetch also returns the full URLs in the response.
+$ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L | jq '.download_path_decrypt'
+"http://127.0.0.1:8000/file/neofus/9/SM-N920C_1_20220819152351_1eub6wdeqb_fac.zip.enc4?decrypt=22992da4a7f887d1c4f5bdc66d116367"
+```
 
 If you prefer to decrypt firmwares manually, sadly you can't do it with SamFetch (as it is an web application not a CLI), but you can use [Samloader](https://github.com/nlscc/samloader) which has a `decrypt` command.
 
-#### Partial downloads
+### Partial downloads
 
-When an encrypted file has decrypted, the file size becomes slightly different from the encrypted file. The thing is, SamFetch sends the firmware size, so your download client can show a progress bar and calculate ETA. However, when the decrypted size is not equal with actual size, download clients will stop the downloads. To fix failed downloads, **SamFetch won't send the firmware size when decrypting has enabled.**
+When an encrypted file has decrypted, the file size becomes slightly different from the encrypted file. The thing is, SamFetch reports the firmware size, so you can see a progress bar and ETA in your browser. However, when the decrypted size is not equal with actual size, this will result in a failed download in 99%. To fix failed downloads, **SamFetch won't report the firmware size when decrypting has enabled.**
 
-#### Verifing the files
+## Running
 
-Samsung (Kies) servers only gives a CRC hash value which is for encrypted file, but as SamFetch can also decrypt the file while sending it to user, it is not possible to know the hash of the firmware. You can download encrypted the file and decrypt manually after checking the CRC. 
+Install dependencies with `pip install -r requirements.txt` and run with:
 
-#### Updating your SamFetch instance
+```
+sanic main.app
+```
 
-There are several ways to update your Heroku app when it is deployed from deploy button, however the easiest one is deleting your old deployed app and deploying it again from deploy button. If you want to keep the same URL, you can always rename your app in Heroku dashboard, renaming app also changes the app URL.
+Visit the URL you see in the console to get started with SamFetch.
+
+```bash
+$ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L
+{
+    "display_name": "Galaxy Note5",
+    "size": 2530817088,
+    "size_readable": "2.36 GB",
+    "filename": "SM-N920C_1_20190117104840_n2lqmc6w6w_fac.zip.enc4",
+    "path": "/neofus/9/",
+    "version": "Nougat (Android 7.0)",
+    "encrypt_version": 4,
+    "last_modified": 20190117144207,
+    "decrypt_key": "0727c304eea8a4d14835a4e6b02c0ce3",
+...
+
+$ curl http://127.0.0.1:8000/file/neofus/9/SM-N920C_1_20220819152351_1eub6wdeqb_fac.zip.enc4?decrypt=22992da4a7f887d1c4f5bdc66d116367 -O .
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 27.0M    0 27.0M    0     0  1282k      0 --:--:--  0:00:21 --:--:-- 1499k
+
+$ curl http://127.0.0.1:8000/file/neofus/9/SM-N920C_1_20220819152351_1eub6wdeqb_fac.zip.enc4 -O .
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0 2413M    0 17.1M    0     0  2604k      0  0:15:48  0:00:06  0:15:42 3651k
+```
+
+## Resources
+
+If you want to do more with Samsung firmwares, or SamFetch is not enough for you, or just want to learn more stuff, you can check [resources](RESOURCES.md).
 
 ## Credits
 
