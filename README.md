@@ -31,7 +31,7 @@ You can also [run in your computer locally](#running) if you don't need to host 
 |:---------|:-----------------|
 | <samp>/:region/:model/list</samp> | List the available firmware versions of a specified model and region. <br>The first item in the list represents the latest firmware available. |
 | <samp>/:region/:model/:firmware</samp> | Returns the firmware details, such as Android version, changelog URL, <br>date and filename which is required for downloading firmware. |
-| <samp>/:path/:filename</samp> | Starts downloading the firmware with given `path` and `filename` <br>which can be obtained in firmware details endpoint. <br>For decrypting, [add the given key as `decrypt` query parameter.](#on-the-fly-decrypting)<br>Also optionally, `filename` query parameter overwrites the <br>filename of the downloaded file. |
+| <samp>/file/:path/:filename</samp> | Starts downloading the firmware with given `path` and `filename` <br>which can be obtained in firmware details endpoint. <br>For decrypting, [add the given key as `decrypt` query parameter.](#on-the-fly-decrypting)<br>Also optionally, `filename` query parameter overwrites the <br>filename of the downloaded file. |
 
 ### Redirects
 
