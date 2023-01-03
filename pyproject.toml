@@ -1,0 +1,29 @@
+[project]
+name = "samfetch"
+version = "0.1.0"
+authors = [{ name = "ysfchn" }]
+description = "Download Samsung firmwares directly from Samsung servers."
+license.file = "LICENSE"
+readme = "README.md"
+urls = { "Source Code" = "https://github.com/ysfchn/SamFetch" }
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: OS Independent",
+    "Topic :: System :: Operating System"
+]
+requires-python = ">=3.9"
+dependencies = [
+    "httpx~=0.20.0",
+    "sanic==21.12.1",
+    "xmltodict",
+    "dicttoxml",
+    "pycryptodome"
+]
+
+[build-system]
+requires = [
+    "setuptools>=61",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
