@@ -121,4 +121,4 @@ This is a Web API variant of [Samloader](https://github.com/nlscc/samloader) pro
 
 ## License
 
-This project is licensed with AGPLv3.
+This project is licensed with AGPLv3 (or later).

@@ -8,7 +8,7 @@ readme = "README.md"
 urls = { "Source Code" = "https://github.com/ysfchn/SamFetch" }
 classifiers = [
     "Programming Language :: Python :: 3.9",
-    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Operating System :: OS Independent",
     "Topic :: System :: Operating System"
 ]
