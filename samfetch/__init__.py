@@ -1,5 +1,5 @@
 __all__ = [
-    "start_decryptor",
+    "decrypt_iterator",
     "Crypto",
     "KiesDict",
     "KiesData",
@@ -10,6 +10,6 @@ __all__ = [
     "Session"
 ]
 
-from samfetch.crypto import start_decryptor, Crypto
+from samfetch.crypto import decrypt_iterator, Crypto
 from samfetch.kies import KiesDict, KiesData, KiesConstants, KiesFirmwareList, KiesRequest, KiesUtils
 from samfetch.session import Session

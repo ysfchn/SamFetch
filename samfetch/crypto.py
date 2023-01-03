@@ -1,12 +1,11 @@
 __all__ = [
-    "start_decryptor",
+    "decrypt_iterator",
     "Crypto"
 ]
 
 import base64
 from typing import Any, AsyncIterator, Generator, Optional, Tuple
 from Crypto.Cipher import AES
-from sanic.response import BaseHTTPResponse
 
 
 # has_next() function
@@ -24,25 +23,19 @@ async def has_next(it) -> Generator[Tuple[bool, Any], None, None]:
         yield False, prev
 
 
-async def start_decryptor(response : BaseHTTPResponse, iterator : AsyncIterator, key : Optional[bytes] = None, client : Optional[Any] = None):
+async def decrypt_iterator(iterator : AsyncIterator, key : Optional[bytes] = None) -> Generator[bytes, None, None]:
     if key:
         cipher = AES.new(key, AES.MODE_ECB)
         async for continues, chunk in has_next(iterator):
             # Decrypt chunk
             data = cipher.decrypt(chunk)
             if continues:
-                await response.send(data)
+                yield data
             else:
-                await response.send(Crypto.unpad(data))
-        if client:
-            await client.aclose()
-        await response.eof()
+                yield Crypto.unpad(data)
     else:
         async for i in iterator:
-            await response.send(i)
-        if client:
-            await client.aclose()
-        await response.eof()
+            yield i
 
 
 # Source:

@@ -7,7 +7,7 @@ from sanic.response import json, redirect
 from sanic.exceptions import NotFound
 from samfetch.kies import KiesData, KiesFirmwareList, KiesRequest, KiesUtils
 from samfetch.session import Session
-from samfetch.crypto import start_decryptor
+from samfetch.crypto import decrypt_iterator
 from web.exceptions import make_error, SamfetchError
 import httpx
 import re
@@ -215,11 +215,12 @@ async def download_binary(request : Request, path: str, filename: str):
                 content_type = "application/zip" if DECRYPT_ENABLED else "application/octet-stream",
                 status = download_file.status_code
             )
-            await start_decryptor(
-                response = response,
+            async for data in decrypt_iterator(
                 iterator = download_file.aiter_raw(chunk_size = request.app.config.SAMFETCH_CHUNK_SIZE),
-                key = None if not DECRYPT_ENABLED else bytes.fromhex(decrypt_key),
-                client = client
-            )
+                key = None if not DECRYPT_ENABLED else bytes.fromhex(decrypt_key)
+            ):
+                await response.send(data)
+            await client.aclose()
+            await response.eof()
     # Raise exception when status is not 200.
     raise make_error(SamfetchError.KIES_SERVER_OUTER_ERROR, download_info.status_code)
