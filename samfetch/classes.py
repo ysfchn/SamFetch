@@ -48,7 +48,8 @@ class Device:
         """
         Fetch a list of firmwares for this Device from Kies servers,
         and return a list containing Firmware object for each 
-        firmware version.
+        firmware version. First Firmware object in the list is always 
+        the latest version.
 
         Returns:
             List of Firmware object bound to this Device.
@@ -80,6 +81,12 @@ class Device:
             A Firmware object bound to this Device and given firmware version.
         """
         return Firmware(KiesUtils.parse_firmware(firmware), self)
+
+    def __repr__(self) -> str:
+        return f"<Device region={self.region} model={self.model}>"
+
+    def __str__(self) -> str:
+        return self.region + ":" + self.model
 
 
 class FirmwareStreamInfo:
@@ -176,12 +183,20 @@ class Firmware:
     @staticmethod
     async def download_generator(
         path : str, session : Session, key : Optional[str] = None, 
-        chunk_size : int = 1024, range_header : Optional[str] = None
+        chunk_size : int = 1024, range_header : Optional[str] = None,
+        allow_range : bool = False
     ) -> Tuple[AsyncGenerator[bytes], FirmwareStreamInfo]:
         """
         Same as download() but doesn't bound to an instance.
         See download() method for more details.
         """
+        if (not allow_range) and (key and range_header):
+            raise ValueError(
+                "Range can't be specified when decrypting has enabled as "
+                "the decrypted firmware size will differ than encrypted firmware "
+                "so it will result in invalid files. "
+                "If you know what to do, set allow_range to True."
+            )
         async with httpx.AsyncClient() as client:
             # Send request to get download info.
             download_info = await client.send(
@@ -218,7 +233,8 @@ class Firmware:
 
     async def download(
         self, decrypt : bool = True, chunk_size : int = 1024, 
-        range_header : Optional[str] = None, refetch : bool = False
+        range_header : Optional[str] = None, refetch : bool = False,
+        allow_range : bool = False
     ) -> Tuple[AsyncGenerator[bytes], FirmwareStreamInfo]:
         """
         A function that returns a two-item tuple; an async generator that iterates 
@@ -242,6 +258,8 @@ class Firmware:
                 cached session will be used instead. However, if a long time has passed 
                 between fetch() and download() calls, Kies servers may invalidate the session, 
                 thus making the download impossible. Set to True if you are having problems.
+            allow_range:
+                If True, allows setting range_header if decrypt has enabled. Default is False.
 
         Returns:
             Two item tuple. First item is the async generator which returns bytes for 
@@ -255,11 +273,18 @@ class Firmware:
             session = Session.copy(self.info._session),
             key = None if not decrypt else self.info.decryption_key(),
             range_header = range_header,
-            chunk_size = chunk_size
+            chunk_size = chunk_size,
+            allow_range = allow_range
         )
         # Consume info
         self.info = None
         return stream, stream_info, 
+
+    def __repr__(self) -> str:
+        return f"<Firmware value={self.value} device={self.device.__repr__()} info={self.info.__repr__()}>"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class FirmwareDetail:
@@ -400,3 +425,9 @@ class FirmwareDetail:
             "crc": self.crc,
             "pda": self.pda
         }
+
+    def __repr__(self) -> str:
+        return f"<FirmwareDetail filename={self.filename} firmware={self.firmware.__repr__()}>"
+
+    def __str__(self) -> str:
+        return self.firmware.value

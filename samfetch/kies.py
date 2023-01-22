@@ -198,11 +198,14 @@ class KiesConstants:
 
 class KiesRequest:
     """
-    Builds prebuilt requests for getting data from Kies servers.
+    Creates prebuilt requests for getting data from Kies servers.
     """
 
     @staticmethod
     def get_nonce() -> httpx.Request:
+        """
+        HTTP request for getting a new nonce from Kies servers.
+        """
         return httpx.Request(
             "POST",
             KiesConstants.NONCE_URL,
@@ -211,6 +214,9 @@ class KiesRequest:
 
     @staticmethod
     def list_firmware(region : str, model : str) -> httpx.Request:
+        """
+        HTTP request for listing all firmwares for a device region and model.
+        """
         return httpx.Request(
             "GET",
             KiesConstants.GET_FIRMWARE_URL.format(region, model)
@@ -218,6 +224,9 @@ class KiesRequest:
 
     @staticmethod
     def get_binary(region : str, model : str, firmware : str, session : Session) -> httpx.Request:
+        """
+        HTTP request for getting information about a firmware for a device.
+        """
         return httpx.Request(
             "POST",
             KiesConstants.BINARY_INFO_URL,
@@ -228,6 +237,9 @@ class KiesRequest:
 
     @staticmethod
     def get_download(path : str, session : Session) -> httpx.Request:
+        """
+        HTTP request for acknowledging the firmware download.
+        """
         # Extract firmware from path.
         filename = path.split("/")[-1]
         return httpx.Request(
@@ -240,6 +252,9 @@ class KiesRequest:
 
     @staticmethod
     def start_download(path : str, session : Session, custom_range : str = None) -> httpx.Request:
+        """
+        HTTP request for streaming/downloading the firmware with given firmware path + name.
+        """
         headers = KiesConstants.HEADERS(session.encrypted_nonce, session.auth)
         if custom_range:
             headers["Range"] = custom_range
@@ -253,9 +268,11 @@ class KiesRequest:
 
 class KiesUtils:
 
-    # Parses firmware version.
     @staticmethod
     def parse_firmware(firmware: str) -> str:
+        """
+        Parses (sanitizes) firmware version.
+        """
         if firmware:
             l = firmware.split("/")
             if len(l) == 3:
@@ -265,10 +282,12 @@ class KiesUtils:
             return "/".join(l)
         raise ValueError("Invalid firmware format.")
 
-    # Parse range header.
-    # Returns two sized tuples, first one is start and second one is end. (-1 if invalid)
     @staticmethod
     def parse_range_header(header: str) -> Tuple[int, int]:
+        """
+        Parse range header.
+        Returns two sized tuples, first one is start and second one is end. (-1 if invalid)
+        """
         # Remove "bytes=" prefix.
         ran = header.strip().removeprefix("bytes=").split("-", maxsplit = 1)
         # Get range.
@@ -276,9 +295,11 @@ class KiesUtils:
             return -1, -1
         return int(ran[0] or 0), int(ran[1] or 0)
 
-    # Joins strings together that includes slashes.
     @staticmethod
     def join_path(*args, prefix = "/") -> str:
+        """
+        Joins strings together that includes slashes.
+        """
         paths = []
         for p in args:
             if p:

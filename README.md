@@ -82,7 +82,7 @@ $ curl http://127.0.0.1:8000/file/neofus/9/SM-N920C_1_20220819152351_1eub6wdeqb_
 | <samp>/:region/:model/latest/download</samp> | Gets the latest firmware version for the device and <br>redirects to `/:region/:model/:firmware/download`. |
 | <samp>/:region/:model/:firmware/download</samp> | Gets the firmware details for the device and <br>redirects to `/file/:path/:filename` with `decrypt` parameter. |
 
-### Envrionment variables
+### Environment variables
 
 | Variable | Description      |
 |:---------|:-----------------|
@@ -98,13 +98,25 @@ SamFetch can be used as module too.
 
 ```py
 from samfetch import Device
+import asyncio
 
-# Create a new device.
-device = Device("TUR", "SM-N920C")
+async def main():
+    # Create a new device.
+    device = Device("TUR", "SM-N920C")
 
-# List available firmwares. First one in the list
-# is the latest firmware.
-firmwares = device.list_firmware()
+    # List available firmwares. First one in the list
+    # is the latest firmware.
+    firmwares = device.list_firmware()
+
+    # Get a generator for downloading firmware.
+    stream, stream_info = await firmwares[0].download()
+
+    # Stream to file.
+    with open("test.zip", "wb") as file:
+        for i in stream:
+            file.write(i)
+
+asyncio.run(main())
 ```
 
 ### Low-level functions
@@ -141,6 +153,27 @@ $ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L | jq '.path + .file
 # SamFetch also returns the full URLs in the response.
 $ curl http://127.0.0.1:8000/firmware/TUR/SM-N920C/latest -L | jq '.download_path_decrypt'
 "http://127.0.0.1:8000/file/neofus/9/SM-N920C_1_20220819152351_1eub6wdeqb_fac.zip.enc4?decrypt=22992da4a7f887d1c4f5bdc66d116367"
+```
+</details> 
+<details>
+    <summary>Module</summary><br>
+
+Decryption **is enabled by default** for module usage.
+
+```py
+from samfetch import Device
+import asyncio
+
+async def main():
+    device = Device("TUR", "SM-N920C")
+    firmwares = device.list_firmware()
+
+    stream, stream_info = await firmwares[0].download(
+        decrypt = True
+    )
+    ...
+
+asyncio.run(main())
 ```
 </details> 
 
