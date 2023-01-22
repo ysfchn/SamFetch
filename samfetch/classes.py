@@ -34,6 +34,10 @@ class FirmwareNotAvailableException(Exception):
 
 
 class Device:
+    """
+    Represents a Samsung device.
+    """
+
     __slots__ = ("region", "model", )
 
     def __init__(self, region : str, model : str) -> None:
@@ -42,7 +46,12 @@ class Device:
 
     async def list_firmware(self) -> List["Firmware"]:
         """
-        List available firmwares for this Device and return a list of Firmware object.
+        Fetch a list of firmwares for this Device from Kies servers,
+        and return a list containing Firmware object for each 
+        firmware version.
+
+        Returns:
+            List of Firmware object bound to this Device.
         """
         data = []
         async with httpx.AsyncClient() as client:
@@ -59,28 +68,70 @@ class Device:
                 data.append(Firmware(i, self))
             return data
 
+    def get_firmware(self, firmware : str) -> "Firmware":
+        """
+        Return a Firmware object from given firmware version string. 
+        The format for firmware version must be one of:
+        - "ABCDEF/ABCDEF/" (note the trailing slash)
+        - "ABCDEF/ABCDEF/ABCDEF"
+        - "ABCDEF/ABCDEF/ABCDEF/ABCDEF"
+
+        Returns:
+            A Firmware object bound to this Device and given firmware version.
+        """
+        return Firmware(KiesUtils.parse_firmware(firmware), self)
+
 
 class FirmwareStreamInfo:
+    """
+    Holds useful information for firmware downloads.
+    """
+
+    __slots__ = ("file_size", "range_header", )
+
     def __init__(self, file_size : int, range_header : Optional[str] = None) -> None:
         self.file_size = file_size
         self.range_header = range_header
 
 
 class Firmware:
+    """
+    A firmware version for a specific Device.
+    """
+
+    __slots__ = ("value", "device", "info", )
+
     def __init__(self, value : str, device : "Device") -> None:
         self.value = value
         self.device = device
         self.info : Optional["FirmwareDetail"] = None
 
+
     @property
     def pda(self) -> dict:
+        """
+        Returns a dictionary which contains bootloader version,
+        firmware date, and iteration count which parsed from 
+        firmware version string.
+        """
         return KiesUtils.read_firmware_dict(self.firmware.value)
+
 
     async def fetch(self, skip_exists : bool = False) -> "FirmwareDetail":
         """
         Fetch this firmware from Kies servers to get FirmwareDetail object 
         that contains related information about this firmware. If skip_exists is
         True, then the cached FirmwareDetail object (if any) will be returned instead.
+
+        Parameters:
+            skip_exists:
+                When fetch() has called, the returning object will be stored in
+                the instance for later use. Set to True for allowing getting from
+                cache (if stored). If False (default), cache will be skipped and
+                every fetch() will make a HTTP request.
+        
+        Returns:
+            A FirmwareDetail object that contains related information about this firmware.
         """
         if skip_exists and self.info:
             return self.info
@@ -102,8 +153,9 @@ class Firmware:
             # https://github.com/nlscc/samloader/issues/54
             if kies.body.get("BINARY_NAME") == None:
                 raise FirmwareNotAvailableException(f"Sadly, Samsung no longer serves this firmware.")
-            self.info = FirmwareDetail(kies.body, self, session)
+            self.info = FirmwareDetail(kies.body, self)
             return self.info
+
 
     @staticmethod
     async def get_session() -> Session:
@@ -112,10 +164,14 @@ class Firmware:
         authenticating with Kies servers, and same Session can't be used for multiple
         requests. (it gets invalidated by server)
         This is automatically called when needed, so you won't probably need that.
+
+        Returns:
+            A Session object that holds nonce fetched from Kies servers.
         """
         async with httpx.AsyncClient() as client:
             nonce = await client.send(KiesRequest.get_nonce())
             return Session.from_response(nonce)
+
 
     @staticmethod
     async def download_generator(
@@ -123,7 +179,8 @@ class Firmware:
         chunk_size : int = 1024, range_header : Optional[str] = None
     ) -> Tuple[AsyncGenerator[bytes], FirmwareStreamInfo]:
         """
-        Same as download() but doesn't bound an instance.
+        Same as download() but doesn't bound to an instance.
+        See download() method for more details.
         """
         async with httpx.AsyncClient() as client:
             # Send request to get download info.
@@ -161,15 +218,38 @@ class Firmware:
 
     async def download(
         self, decrypt : bool = True, chunk_size : int = 1024, 
-        range_header : Optional[str] = None
+        range_header : Optional[str] = None, refetch : bool = False
     ) -> Tuple[AsyncGenerator[bytes], FirmwareStreamInfo]:
         """
         A function that returns a two-item tuple; an async generator that iterates 
         HTTP firmware download in chunks and a FirmwareStreamInfo object that stored
         useful information for the download such as encrypted file size.
         If decrypt is True, the generator will decrypt chunk in each iteration automatically.
+
+        Parameters:
+            decrypt:
+                If True, the returned generator will return decrypted firmware bytes
+                for each iteration instead of returning plain encrypted bytes.
+            chunk_size:
+                Number of bytes to be returned on each iteration for generator.
+            range_header:
+                A valid "Range" HTTP value if you want to get the part of the firmware
+                instead of downloading whole. This can be useful for resuming/pausing
+                downloads.
+            refetch:
+                Setting to True will fetch firmware details again with fetch() and refresh
+                the session (more HTTP requests). If set to False (default), then the 
+                cached session will be used instead. However, if a long time has passed 
+                between fetch() and download() calls, Kies servers may invalidate the session, 
+                thus making the download impossible. Set to True if you are having problems.
+
+        Returns:
+            Two item tuple. First item is the async generator which returns bytes for 
+            the firmware which is downloading in each iteration, and second item is 
+            FirmwareStreamInfo which gives basic information about currently 
+            downloading file.
         """
-        await self.fetch(skip_exists = True)
+        await self.fetch(skip_exists = not refetch)
         stream, stream_info = await self.download_generator(
             path = self.info.path + self.info.filename, 
             session = Session.copy(self.info._session),
@@ -183,44 +263,128 @@ class Firmware:
 
 
 class FirmwareDetail:
-    __slots__ = ("_body", "_session", "firmware")
+    """
+    Fetched details for a firmware of a device.
+    """
 
-    def __init__(self, body : KiesDict, firmware : "Firmware", session : Session) -> None:
+    __slots__ = ("_body", "firmware")
+
+    def __init__(self, body : KiesDict, firmware : "Firmware") -> None:
         self._body = body
-        self._session = session
         self.firmware = firmware
 
     @property
-    def display_name(self) -> str : return self._body["DEVICE_MODEL_DISPLAYNAME"]
+    def display_name(self) -> str:
+        """
+        Display name of the device.
+        """
+        return self._body["DEVICE_MODEL_DISPLAYNAME"]
+
     @property
-    def size(self) -> str : return int(self._body["BINARY_BYTE_SIZE"])
+    def size(self) -> str:
+        """
+        Download size for the ENCRYPTED firmware file in bytes.
+        """
+        return int(self._body["BINARY_BYTE_SIZE"])
+
     @property
-    def filename(self) -> str : return self._body["BINARY_NAME"]
+    def filename(self) -> str:
+        """
+        File name of the firmware in Kies server.
+        """
+        return self._body["BINARY_NAME"]
+
     @property
-    def path(self) -> str : return self._body["MODEL_PATH"]
+    def path(self) -> str:
+        """
+        File path (no file name) of the firmware in Kies server.
+        """
+        return self._body["MODEL_PATH"]
+
     @property
-    def version(self) -> str: return self._body["CURRENT_OS_VERSION"].replace("(", " (")
+    def version(self) -> str:
+        """
+        Android version of the firmware.
+        """
+        return self._body["CURRENT_OS_VERSION"].replace("(", " (")
+
     @property
-    def last_modified(self) -> str : return int(self._body["LAST_MODIFIED"])
+    def last_modified(self) -> int:
+        """
+        Last modified date of the firmware in integer.
+        """
+        return int(self._body["LAST_MODIFIED"])
+
     @property
-    def platform(self) -> str : return self._body["DEVICE_PLATFORM"]
+    def platform(self) -> str:
+        """
+        Platform of the firmware.
+        """
+        return self._body["DEVICE_PLATFORM"]
+
     @property
-    def crc(self) -> str: return self._body["BINARY_CRC"]
+    def crc(self) -> str:
+        """
+        CRC value for the ENCRYPTED firmware file.
+        """
+        return self._body["BINARY_CRC"]
+
     @property
-    def firmware_changelog_url(self) -> str : return self._body.get_first("DESCRIPTION", "ADD_DESCRIPTION")
+    def firmware_changelog_url(self) -> Optional[str]:
+        """
+        An URL that points to Samsung's website which contains a changelog
+        for this firmware of this device. Not available for every device
+        and firmware.
+        """
+        return self._body.get_first("DESCRIPTION", "ADD_DESCRIPTION")
+
     @property
-    def encrypt_version(self) -> Literal[2, 4] : return 4 if str(self._body["BINARY_NAME"]).endswith("4") else 2
+    def encrypt_version(self) -> Literal[2, 4]:
+        """
+        Encrypt version of the firmware file. If firmware file name
+        ends with "4", then the version is 4, otherwise it is 2.
+        You won't need this value as decryption_key() already handles
+        encryption version.
+        """
+        return 4 if str(self._body["BINARY_NAME"]).endswith("4") else 2
+
     @property
-    def size_readable(self) -> str : return "{:.2f} GB".format(float(self._body["BINARY_BYTE_SIZE"]) / 1024 / 1024 / 1024)
+    def size_readable(self) -> str:
+        """
+        Firmware size represented in GiB.
+        """
+        return "{:.2f} GB".format(float(self._body["BINARY_BYTE_SIZE"]) / 1024 / 1024 / 1024)
+
     @property
-    def pda(self) -> dict : return self.firmware.pda
+    def pda(self) -> dict:
+        """
+        A dictionary which contains bootloader version,
+        firmware date, and iteration count which parsed from 
+        firmware version string.
+        """
+        return self.firmware.pda
 
     def decryption_key(self) -> str:
-        return \
-            self._session.getv2key(self.firmware.value, self.firmware.device.model, self.firmware.device.region).hex() if self.encrypt_version == 2 else \
-            self._session.getv4key(self._body.get_first("LATEST_FW_VERSION", "ADD_LATEST_FW_VERSION"), self._body["LOGIC_VALUE_FACTORY"]).hex()
+        """
+        AES (ECB mode) key encoded as hex, which is used for decrypting the
+        plain/encrypted firmware file. You won't need this if decrypting has enabled
+        in download() method, only if you are downloading the encrypted file.
+        """
+        if self.encrypt_version == 2:
+            return Session.getv2key(
+                self.firmware.value, self.firmware.device.model, self.firmware.device.region
+            ).hex()
+        else:
+            return Session.getv4key(
+                self._body.get_first("LATEST_FW_VERSION", "ADD_LATEST_FW_VERSION"), 
+                self._body["LOGIC_VALUE_FACTORY"]
+            ).hex()
 
     def to_dict(self) -> dict:
+        """
+        Returns a dictionary (JSON-compatible) containing related
+        information for this firmware. 
+        """
         return {
             "display_name": self.display_name,
             "size": self.size,

@@ -76,8 +76,10 @@ class Session:
         if "JSESSIONID" in response.cookies:
             self.session_id = response.cookies["JSESSIONID"]
 
-    def getv4key(self, fw_ver, logic_value) -> bytes:
+    @staticmethod
+    def getv4key(fw_ver, logic_value) -> bytes:
         return hashlib.md5(Session.custom_logic_check(fw_ver, logic_value).encode()).digest()
 
-    def getv2key(self, version, model, region) -> bytes:
+    @staticmethod
+    def getv2key(version, model, region) -> bytes:
         return hashlib.md5(f"{region}:{model}:{version}".encode()).digest()

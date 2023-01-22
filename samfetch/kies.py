@@ -26,7 +26,6 @@ from collections import UserDict
 from typing import List, Tuple, Dict, Any, Optional
 import dicttoxml
 import xmltodict
-import re
 import httpx
 import string
 from samfetch.session import Session

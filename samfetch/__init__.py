@@ -13,18 +13,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+"""
+Download Samsung Stock ROMs from Samsung's own Kies servers, 
+without any restriction, rate-limit, authorization or passwords.
+"""
+
 __all__ = [
-    "decrypt_iterator",
-    "Crypto",
-    "KiesDict",
-    "KiesData",
-    "KiesConstants",
-    "KiesRequest",
-    "KiesUtils",
-    "KiesFirmwareList"
-    "Session"
+    "Firmware",
+    "Device"
 ]
 
-from samfetch.crypto import decrypt_iterator, Crypto
-from samfetch.kies import KiesDict, KiesData, KiesConstants, KiesFirmwareList, KiesRequest, KiesUtils
-from samfetch.session import Session
+from samfetch.classes import Firmware, Device
