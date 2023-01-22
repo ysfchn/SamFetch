@@ -61,6 +61,9 @@ class Session:
             out += firmware[ord(c) & 0xf]
         return out
 
+    def copy(self) -> "Session":
+        return Session(self.encrypted_nonce, self.session_id)
+
     def logic_check(self, firmware : str) -> str:
         return Session.custom_logic_check(firmware, self.nonce)
 

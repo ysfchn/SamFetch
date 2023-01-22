@@ -40,15 +40,16 @@ class KiesFirmwareList:
         self._data = data
         self._versions = None if ("versioninfo" not in self._data) else self._data["versioninfo"]["firmware"]["version"]
 
+    def __bool__(self):
+        return self.exists
+
     @classmethod
     def from_xml(cls, xml : str) -> "KiesFirmwareList":
         return cls(xmltodict.parse(xml, dict_constructor = dict))
 
     @property
     def exists(self) -> bool:
-        if (self._versions == None) or (self.latest == None):
-            return False
-        return True
+        return bool(self.latest)
 
     @property
     def latest(self) -> Optional[str]:
