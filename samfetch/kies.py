@@ -132,7 +132,7 @@ class KiesConstants:
     BINARY_FILE_URL = "https://neofussvr.sslcs.cdngc.net/NF_DownloadBinaryInitForMass.do"
 
     # Binary download url
-    BINARY_DOWNLOAD_URL = "http://cloud-neofussvr.sslcs.cdngc.net/NF_DownloadBinaryForMass.do"
+    BINARY_DOWNLOAD_URL = "http://cloud-neofussvr.samsungmobile.com/NF_DownloadBinaryForMass.do"
 
     # Build custom headers so Kies servers will think the
     # request is coming from the Kies client.
