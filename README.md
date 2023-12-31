@@ -2,7 +2,10 @@
 
 A simple Web API to download Samsung Stock ROMs from Samsung's own Kies servers, without any restriction, rate-limit, authorization or passwords. Made in Python and built with Sanic.
 
-> **Warning**<br>
+> [!CAUTION]
+> Recent changes in Samsung backend causes all firmware downloads **require a valid IMEI number**, which must match with the model that is requested. Check [this link](https://github.com/zacharee/SamloaderKotlin/issues/116) for more information. SamFetch currently didn't adapted this change yet, which makes SamFetch unusable right now.
+
+> [!WARNING]
 > Due to a change in Samsung servers, you can only download the latest firmware even if you asked for an older firmware. [See discussion here.](https://github.com/ysfchn/SamFetch/issues/6)
 
 ## Deploy & Use
